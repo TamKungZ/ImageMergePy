@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# PyInstaller
+*.spec
+*.manifest
+*.pyz
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
