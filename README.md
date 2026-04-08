@@ -29,15 +29,25 @@ pip install -r requirements.txt
 ## Run (source)
 
 ```bash
-python media_merge_gui.py
+python MainApp.py
 ```
 
 ## Build EXE (PyInstaller)
 
-Example one-file build command with bundled assets:
+Use build scripts:
 
 ```bash
-pyinstaller --noconfirm --onefile --windowed --name ImageMergePy --add-data "assets;assets" media_merge_gui.py
+./build.sh
+```
+
+```bat
+build.bat
+```
+
+Or run PyInstaller directly:
+
+```bash
+pyinstaller --noconfirm --clean --onefile --windowed --name ImageMerge --add-data "assets;assets" --add-data "locales;locales" MainApp.py
 ```
 
 The built executable will be in the `dist/` folder.
@@ -46,3 +56,5 @@ The built executable will be in the `dist/` folder.
 
 - Kanit fonts are stored in `assets/Kanit/` with license file `assets/Kanit/OFL.txt`.
 - If Kanit is not available, the app falls back to `Segoe UI`.
+- Language files are in `locales/en.json` and `locales/th.json`.
+- Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.

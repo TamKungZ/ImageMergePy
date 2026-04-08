@@ -1,16 +1,18 @@
+import ctypes
+import hashlib
+import json
+import locale
 import os
 import re
-import sys
 import shutil
-import hashlib
+import sys
 import threading
 import uuid
-import ctypes
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_TITLE = "Media Merge / Dedupe Tool"
+APP_FALLBACK_TITLE = "ImageMerge"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tiff"}
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv", ".ts", ".mts"}
@@ -25,6 +27,10 @@ FONT_FILES = [
     Path("assets/Kanit/Kanit-Italic.ttf"),
     Path("assets/Kanit/Kanit-Bold.ttf"),
 ]
+
+LOCALES_DIR = Path("locales")
+DEFAULT_LANG = "en"
+SUPPORTED_LANGS = {"en", "th"}
 
 UUID_LIKE_RE = re.compile(
     r"^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?: \(\d+\))?$"
@@ -43,8 +49,8 @@ def register_windows_font(font_path: Path) -> bool:
     if os.name != "nt":
         return False
     try:
-        FR_PRIVATE = 0x10
-        result = ctypes.windll.gdi32.AddFontResourceExW(str(font_path), FR_PRIVATE, 0)
+        fr_private = 0x10
+        result = ctypes.windll.gdi32.AddFontResourceExW(str(font_path), fr_private, 0)
         if result > 0:
             ctypes.windll.user32.SendMessageW(0xFFFF, 0x001D, 0, 0)
             return True
@@ -80,18 +86,69 @@ def build_output_name(index: int, ext: str, prefix: str = "") -> str:
 
 def split_existing_prefix_and_number(path: Path) -> tuple[str, int]:
     stem = path.stem
-    m = re.match(r"^(?:(.+?)-)?(\d+)$", stem)
-    if m:
-        prefix = normalize_prefix(m.group(1) or "")
-        return prefix, int(m.group(2))
-    m2 = re.match(r"^(\d+)", stem)
-    if m2:
-        return "", int(m2.group(1))
+    match = re.match(r"^(?:(.+?)-)?(\d+)$", stem)
+    if match:
+        prefix = normalize_prefix(match.group(1) or "")
+        return prefix, int(match.group(2))
+    match_number = re.match(r"^(\d+)", stem)
+    if match_number:
+        return "", int(match_number.group(1))
     return "", 99999999
 
 
 def dedupe_key(file_hash: str, ext: str) -> tuple[str, str]:
     return file_hash, ext.lower()
+
+
+def detect_language() -> str:
+    env_lang = os.environ.get("IMAGEMERGE_LANG", "").strip().lower()
+    if env_lang in SUPPORTED_LANGS:
+        return env_lang
+    local_lang, _ = locale.getdefaultlocale()
+    if local_lang and local_lang.lower().startswith("th"):
+        return "th"
+    return DEFAULT_LANG
+
+
+class I18n:
+    def __init__(self, lang: str):
+        self.catalogs: dict[str, dict[str, str]] = {}
+        self._load_catalog(DEFAULT_LANG)
+        self._load_catalog("th")
+        self.lang = lang if lang in self.catalogs else DEFAULT_LANG
+
+    def _load_catalog(self, lang: str):
+        catalog_path = resource_path(LOCALES_DIR / f"{lang}.json")
+        if not catalog_path.exists():
+            self.catalogs[lang] = {}
+            return
+        try:
+            with open(catalog_path, "r", encoding="utf-8") as file:
+                data = json.load(file)
+            if isinstance(data, dict):
+                self.catalogs[lang] = {str(key): str(value) for key, value in data.items()}
+            else:
+                self.catalogs[lang] = {}
+        except Exception:
+            self.catalogs[lang] = {}
+
+    def t(self, key: str, **kwargs) -> str:
+        text = self.catalogs.get(self.lang, {}).get(key)
+        if text is None:
+            text = self.catalogs.get(DEFAULT_LANG, {}).get(key, key)
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            return text
+
+
+def t_identity(key: str, **kwargs) -> str:
+    if not kwargs:
+        return key
+    try:
+        return key.format(**kwargs)
+    except Exception:
+        return key
 
 
 class Logger:
@@ -112,11 +169,11 @@ class Logger:
 
 
 def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    hash_obj = hashlib.sha256()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(8192), b""):
+            hash_obj.update(chunk)
+    return hash_obj.hexdigest()
 
 
 def classify_source_name(path: Path) -> tuple[str, int | None]:
@@ -157,21 +214,21 @@ def is_video(path: Path) -> bool:
 def iter_media_files(root_dir: Path):
     for root, _, filenames in os.walk(root_dir):
         for name in filenames:
-            p = Path(root) / name
-            if p.suffix.lower() in MEDIA_EXTS:
-                yield p
+            file_path = Path(root) / name
+            if file_path.suffix.lower() in MEDIA_EXTS:
+                yield file_path
 
 
-def organize_output(output_dir: Path, logger: Logger | None = None):
-    media_files = [p for p in output_dir.iterdir() if is_media_file(p)]
+def organize_output(output_dir: Path, logger: Logger | None = None, tr=t_identity):
+    media_files = [path for path in output_dir.iterdir() if is_media_file(path)]
 
     image_files = sorted(
-        [p for p in media_files if is_image(p)],
-        key=lambda p: split_existing_prefix_and_number(p)[1],
+        [path for path in media_files if is_image(path)],
+        key=lambda path: split_existing_prefix_and_number(path)[1],
     )
     video_files = sorted(
-        [p for p in media_files if is_video(p)],
-        key=lambda p: split_existing_prefix_and_number(p)[1],
+        [path for path in media_files if is_video(path)],
+        key=lambda path: split_existing_prefix_and_number(path)[1],
     )
     ordered_files = image_files + video_files
 
@@ -184,13 +241,13 @@ def organize_output(output_dir: Path, logger: Logger | None = None):
         temp_files.append((temp_path, prefix))
 
     renamed_files: list[Path] = []
-    for idx, (temp_path, prefix) in enumerate(temp_files, start=1):
-        new_path = output_dir / build_output_name(idx, temp_path.suffix, prefix)
+    for index, (temp_path, prefix) in enumerate(temp_files, start=1):
+        new_path = output_dir / build_output_name(index, temp_path.suffix, prefix)
         temp_path.rename(new_path)
         renamed_files.append(new_path)
 
     if logger:
-        logger.write(f"จัดระเบียบ output เสร็จ {len(renamed_files)} ไฟล์ (รูปก่อน วิดีโอท้ายสุด)")
+        logger.write(tr("log_output_organized", count=len(renamed_files)))
 
     return renamed_files
 
@@ -199,10 +256,10 @@ def collect_source_media(input_dir_configs: list[dict]):
     image_files = []
     video_files = []
 
-    for cfg in input_dir_configs:
-        src: Path = cfg["path"]
-        prefix: str = cfg.get("prefix", "")
-        for file_path in iter_media_files(src):
+    for config in input_dir_configs:
+        source_path: Path = config["path"]
+        prefix: str = config.get("prefix", "")
+        for file_path in iter_media_files(source_path):
             try:
                 ctime = os.path.getctime(file_path)
             except OSError:
@@ -218,15 +275,15 @@ def collect_source_media(input_dir_configs: list[dict]):
     return image_files + video_files
 
 
-def safe_delete_file(path: Path, logger: Logger | None = None):
+def safe_delete_file(path: Path, logger: Logger | None = None, tr=t_identity):
     try:
         if path.exists():
             path.unlink()
             if logger:
-                logger.write(f"ลบต้นฉบับ: {path}")
-    except Exception as e:
+                logger.write(tr("log_source_deleted", path=path))
+    except Exception as exc:
         if logger:
-            logger.write(f"ลบไม่ได้: {path} -> {e}")
+            logger.write(tr("log_source_delete_failed", path=path, error=exc))
 
 
 def process_media(
@@ -235,42 +292,49 @@ def process_media(
     mode: str,
     clear_output_first: bool,
     logger: Logger,
+    tr=t_identity,
 ):
     if not input_dir_configs:
-        raise ValueError("ยังไม่ได้เลือก input folder")
+        raise ValueError(tr("error_no_input"))
 
-    input_paths = [cfg["path"] for cfg in input_dir_configs]
+    input_paths = [config["path"] for config in input_dir_configs]
     if output_dir in input_paths:
-        raise ValueError("output folder ห้ามซ้ำกับ input folder")
+        raise ValueError(tr("error_output_same_as_input"))
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.write("เริ่มทำงาน...")
-    logger.write(f"โหมด: {mode}")
-    logger.write(f"Output: {output_dir}")
-    for cfg in input_dir_configs:
-        logger.write(f"Input: {cfg['path']} | prefix: {normalize_prefix(cfg.get('prefix', '')) or '-'}")
+    logger.write(tr("log_start"))
+    logger.write(tr("log_mode", mode=mode))
+    logger.write(tr("log_output_dir", output=output_dir))
+    for config in input_dir_configs:
+        logger.write(
+            tr(
+                "log_input_entry",
+                input_path=config["path"],
+                prefix=normalize_prefix(config.get("prefix", "")) or "-",
+            )
+        )
 
     if clear_output_first:
-        logger.write("กำลังล้างไฟล์ media เดิมใน output...")
+        logger.write(tr("log_clearing_output"))
         removed = 0
-        for p in list(output_dir.iterdir()):
-            if is_media_file(p):
-                p.unlink()
+        for path in list(output_dir.iterdir()):
+            if is_media_file(path):
+                path.unlink()
                 removed += 1
-        logger.write(f"ล้าง output media เดิมแล้ว {removed} ไฟล์")
+        logger.write(tr("log_cleared_output", count=removed))
 
-    existing_output_files = organize_output(output_dir, logger=logger)
+    existing_output_files = organize_output(output_dir, logger=logger, tr=tr)
     existing_hashes: dict[tuple[str, str], Path] = {}
     for file_path in existing_output_files:
         try:
             file_hash = sha256_file(file_path)
             existing_hashes[dedupe_key(file_hash, file_path.suffix)] = file_path
-        except Exception as e:
-            logger.write(f"ข้ามไฟล์ output ที่อ่านไม่ได้: {file_path} -> {e}")
+        except Exception as exc:
+            logger.write(tr("log_skip_unreadable_output", path=file_path, error=exc))
 
     source_items = collect_source_media(input_dir_configs)
-    logger.write(f"พบ media ใน input ทั้งหมด {len(source_items)} ไฟล์")
+    logger.write(tr("log_found_media", count=len(source_items)))
 
     added = 0
     skipped = 0
@@ -283,9 +347,9 @@ def process_media(
     for file_path, _ctime, prefix in source_items:
         try:
             file_hash = sha256_file(file_path)
-        except Exception as e:
+        except Exception as exc:
             failed += 1
-            logger.write(f"อ่าน hash ไม่ได้: {file_path} -> {e}")
+            logger.write(tr("log_hash_failed", path=file_path, error=exc))
             continue
 
         ext = file_path.suffix.lower()
@@ -293,9 +357,9 @@ def process_media(
 
         if file_key in existing_hashes:
             skipped += 1
-            logger.write(f"ซ้ำ ข้าม: {file_path}")
+            logger.write(tr("log_duplicate_skip", path=file_path))
             if mode in {MODE_MOVE, MODE_COPY_DELETE}:
-                safe_delete_file(file_path, logger)
+                safe_delete_file(file_path, logger, tr)
                 deleted_sources += 1
             continue
 
@@ -306,43 +370,46 @@ def process_media(
             if mode == MODE_MOVE:
                 shutil.move(str(file_path), str(dest_path))
                 moved += 1
-                logger.write(f"ย้าย: {file_path} -> {dest_path.name}")
+                logger.write(tr("log_moved", source=file_path, dest=dest_path.name))
             elif mode == MODE_COPY_DELETE:
                 shutil.copy2(file_path, dest_path)
                 copied += 1
-                logger.write(f"คัดลอก: {file_path} -> {dest_path.name}")
-                safe_delete_file(file_path, logger)
+                logger.write(tr("log_copied", source=file_path, dest=dest_path.name))
+                safe_delete_file(file_path, logger, tr)
                 deleted_sources += 1
             elif mode == MODE_COPY_KEEP:
                 shutil.copy2(file_path, dest_path)
                 copied += 1
-                logger.write(f"คัดลอก: {file_path} -> {dest_path.name}")
+                logger.write(tr("log_copied", source=file_path, dest=dest_path.name))
             else:
-                raise ValueError(f"ไม่รู้จักโหมด: {mode}")
+                raise ValueError(tr("error_unknown_mode", mode=mode))
 
             existing_hashes[file_key] = dest_path
             added += 1
-        except Exception as e:
+        except Exception as exc:
             failed += 1
-            logger.write(f"ทำไม่สำเร็จ: {file_path} -> {e}")
+            logger.write(tr("log_process_failed", path=file_path, error=exc))
 
-    final_files = organize_output(output_dir, logger=logger)
+    final_files = organize_output(output_dir, logger=logger, tr=tr)
 
     logger.write("=" * 50)
-    logger.write(f"เพิ่มใหม่: {added}")
-    logger.write(f"ซ้ำข้ามไป: {skipped}")
-    logger.write(f"ย้าย: {moved}")
-    logger.write(f"คัดลอก: {copied}")
-    logger.write(f"ลบต้นฉบับ: {deleted_sources}")
-    logger.write(f"ผิดพลาด: {failed}")
-    logger.write(f"รวม output ตอนนี้: {len(final_files)} ไฟล์")
-    logger.write("เสร็จแล้ว 🎉")
+    logger.write(tr("log_added", count=added))
+    logger.write(tr("log_skipped", count=skipped))
+    logger.write(tr("log_moved_count", count=moved))
+    logger.write(tr("log_copied_count", count=copied))
+    logger.write(tr("log_deleted_sources", count=deleted_sources))
+    logger.write(tr("log_failed", count=failed))
+    logger.write(tr("log_total_output", count=len(final_files)))
+    logger.write(tr("log_done"))
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(APP_TITLE)
+        self.i18n = I18n(detect_language())
+        self.t = self.i18n.t
+
+        self.title(self.t("app_title") or APP_FALLBACK_TITLE)
         self.geometry("1100x760")
         self.minsize(980, 680)
 
@@ -365,67 +432,50 @@ class App(tk.Tk):
         outer = ttk.Frame(self, padding=12)
         outer.pack(fill="both", expand=True)
 
-        ttk.Label(outer, text="Media Merge / Dedupe Tool", style="Title.TLabel").pack(anchor="w", pady=(0, 10))
-        ttk.Label(
-            outer,
-            text=(
-                "รวมไฟล์จากหลายโฟลเดอร์, กันไฟล์ซ้ำด้วย SHA-256 + นามสกุลไฟล์, จัดชื่อเป็นเลขเรียง, "
-                "วางรูปไว้ก่อน วิดีโอไว้ท้ายสุด, จัดลำดับพิเศษสำหรับชื่อไฟล์บางแบบ และตั้ง prefix แยกต่อโฟลเดอร์ได้"
-            ),
-            wraplength=980,
-        ).pack(anchor="w", pady=(0, 10))
+        ttk.Label(outer, text=self.t("app_header"), style="Title.TLabel").pack(anchor="w", pady=(0, 10))
+        ttk.Label(outer, text=self.t("app_desc"), wraplength=980).pack(anchor="w", pady=(0, 10))
 
-        input_frame = ttk.LabelFrame(outer, text="Input folders + prefix", padding=10)
+        input_frame = ttk.LabelFrame(outer, text=self.t("section_input"), padding=10)
         input_frame.pack(fill="both", pady=(0, 10))
 
         input_btn_row = ttk.Frame(input_frame)
         input_btn_row.pack(fill="x", pady=(0, 8))
-        ttk.Button(input_btn_row, text="เพิ่มโฟลเดอร์", command=self.add_input_folder).pack(side="left")
-        ttk.Button(input_btn_row, text="แก้ prefix", command=self.edit_selected_prefix).pack(side="left", padx=6)
-        ttk.Button(input_btn_row, text="ลบที่เลือก", command=self.remove_selected_input).pack(side="left", padx=6)
-        ttk.Button(input_btn_row, text="ล้างทั้งหมด", command=self.clear_inputs).pack(side="left")
+        ttk.Button(input_btn_row, text=self.t("btn_add_folder"), command=self.add_input_folder).pack(side="left")
+        ttk.Button(input_btn_row, text=self.t("btn_edit_prefix"), command=self.edit_selected_prefix).pack(side="left", padx=6)
+        ttk.Button(input_btn_row, text=self.t("btn_remove_selected"), command=self.remove_selected_input).pack(side="left", padx=6)
+        ttk.Button(input_btn_row, text=self.t("btn_clear_all"), command=self.clear_inputs).pack(side="left")
 
         columns = ("folder", "prefix")
         self.input_tree = ttk.Treeview(input_frame, columns=columns, show="headings", height=8)
-        self.input_tree.heading("folder", text="Folder")
-        self.input_tree.heading("prefix", text="Prefix")
+        self.input_tree.heading("folder", text=self.t("col_folder"))
+        self.input_tree.heading("prefix", text=self.t("col_prefix"))
         self.input_tree.column("folder", width=760, anchor="w")
         self.input_tree.column("prefix", width=180, anchor="w")
         self.input_tree.pack(fill="x", expand=False)
         self.input_tree.bind("<Double-1>", self._on_tree_double_click)
 
-        output_frame = ttk.LabelFrame(outer, text="Output folder", padding=10)
+        output_frame = ttk.LabelFrame(outer, text=self.t("section_output"), padding=10)
         output_frame.pack(fill="x", pady=(0, 10))
         output_row = ttk.Frame(output_frame)
         output_row.pack(fill="x")
         ttk.Entry(output_row, textvariable=self.output_dir_var).pack(side="left", fill="x", expand=True)
-        ttk.Button(output_row, text="เลือก output", command=self.choose_output_folder).pack(side="left", padx=(8, 0))
+        ttk.Button(output_row, text=self.t("btn_select_output"), command=self.choose_output_folder).pack(side="left", padx=(8, 0))
 
-        mode_frame = ttk.LabelFrame(outer, text="Mode", padding=10)
+        mode_frame = ttk.LabelFrame(outer, text=self.t("section_mode"), padding=10)
         mode_frame.pack(fill="x", pady=(0, 10))
-        ttk.Radiobutton(mode_frame, text="คัดลอกอย่างเดียว (ไม่ลบ input)", variable=self.mode_var, value=MODE_COPY_KEEP).pack(anchor="w")
-        ttk.Radiobutton(mode_frame, text="คัดลอกแล้วลบต้นฉบับใน input", variable=self.mode_var, value=MODE_COPY_DELETE).pack(anchor="w")
-        ttk.Radiobutton(mode_frame, text="ย้ายไฟล์จาก input ไป output", variable=self.mode_var, value=MODE_MOVE).pack(anchor="w")
-        ttk.Checkbutton(mode_frame, text="ล้างไฟล์ media เดิมใน output ก่อนเริ่ม", variable=self.clear_output_var).pack(anchor="w", pady=(8, 0))
+        ttk.Radiobutton(mode_frame, text=self.t("mode_copy_keep"), variable=self.mode_var, value=MODE_COPY_KEEP).pack(anchor="w")
+        ttk.Radiobutton(mode_frame, text=self.t("mode_copy_delete"), variable=self.mode_var, value=MODE_COPY_DELETE).pack(anchor="w")
+        ttk.Radiobutton(mode_frame, text=self.t("mode_move"), variable=self.mode_var, value=MODE_MOVE).pack(anchor="w")
+        ttk.Checkbutton(mode_frame, text=self.t("opt_clear_output"), variable=self.clear_output_var).pack(anchor="w", pady=(8, 0))
 
-        ttk.Label(
-            mode_frame,
-            text=(
-                "หมายเหตุ: ไฟล์ซ้ำจะถูกข้ามเมื่อ hash ของไฟล์จริงและนามสกุลตรงกัน\n"
-                "ไฟล์ชื่อแนว IMG_0072 จะเรียงตามเลข แล้วใช้เวลาเป็นตัวตัดสินเมื่อเลขชนกัน\n"
-                "ไฟล์ชื่อแนว UUID / hash ยาว ๆ จะเรียงตามเวลาโดยตรง\n"
-                "ไฟล์อื่น ๆ ยังใช้การเรียงแบบเดิมตามเวลา\n"
-                "prefix ถูกตั้งแยกตามแต่ละ input folder และชื่อไฟล์จะออกแบบ full-0001.jpg"
-            ),
-            wraplength=980,
-        ).pack(anchor="w", pady=(8, 0))
+        ttk.Label(mode_frame, text=self.t("mode_note"), wraplength=980).pack(anchor="w", pady=(8, 0))
 
         action_row = ttk.Frame(outer)
         action_row.pack(fill="x", pady=(0, 10))
-        self.start_btn = ttk.Button(action_row, text="เริ่ม", command=self.start_process)
+        self.start_btn = ttk.Button(action_row, text=self.t("btn_start"), command=self.start_process)
         self.start_btn.pack(side="left")
 
-        log_frame = ttk.LabelFrame(outer, text="Log", padding=10)
+        log_frame = ttk.LabelFrame(outer, text=self.t("section_log"), padding=10)
         log_frame.pack(fill="both", expand=True)
         self.log_text = tk.Text(log_frame, wrap="word", state="disabled", font=(self.font_family, 10))
         self.log_text.pack(side="left", fill="both", expand=True)
@@ -436,8 +486,8 @@ class App(tk.Tk):
 
     def prompt_prefix(self, initial: str = "") -> str | None:
         value = simpledialog.askstring(
-            APP_TITLE,
-            "ตั้ง prefix สำหรับโฟลเดอร์นี้\nปล่อยว่างได้ เช่น full, short, ref",
+            self.t("app_title"),
+            self.t("prompt_prefix"),
             initialvalue=initial,
             parent=self,
         )
@@ -446,14 +496,14 @@ class App(tk.Tk):
         return normalize_prefix(value)
 
     def add_input_folder(self):
-        folder = filedialog.askdirectory(title="เลือก input folder")
+        folder = filedialog.askdirectory(title=self.t("dlg_select_input"))
         if not folder:
             return
         path = Path(folder)
         if any(entry["path"] == path for entry in self.input_entries):
-            messagebox.showinfo(APP_TITLE, "โฟลเดอร์นี้ถูกเพิ่มแล้ว")
+            messagebox.showinfo(self.t("app_title"), self.t("msg_folder_exists"))
             return
-        prefix = self.prompt_prefix(path.name)  # default from folder name
+        prefix = self.prompt_prefix(path.name)
         if prefix is None:
             return
         entry = {"path": path, "prefix": prefix}
@@ -466,19 +516,19 @@ class App(tk.Tk):
     def edit_selected_prefix(self):
         selected = self._get_selected_paths()
         if not selected:
-            messagebox.showwarning(APP_TITLE, "กรุณาเลือกโฟลเดอร์ก่อน")
+            messagebox.showwarning(self.t("app_title"), self.t("msg_select_folder_first"))
             return
         if len(selected) > 1:
-            messagebox.showwarning(APP_TITLE, "แก้ prefix ได้ครั้งละ 1 โฟลเดอร์")
+            messagebox.showwarning(self.t("app_title"), self.t("msg_edit_one_at_a_time"))
             return
-        sel = selected[0]
+        selected_item = selected[0]
         for entry in self.input_entries:
-            if str(entry["path"]) == sel:
+            if str(entry["path"]) == selected_item:
                 new_prefix = self.prompt_prefix(entry.get("prefix", ""))
                 if new_prefix is None:
                     return
                 entry["prefix"] = new_prefix
-                self.input_tree.item(sel, values=(str(entry["path"]), new_prefix or "-"))
+                self.input_tree.item(selected_item, values=(str(entry["path"]), new_prefix or "-"))
                 return
 
     def _on_tree_double_click(self, _event):
@@ -489,17 +539,17 @@ class App(tk.Tk):
         if not selected:
             return
         selected_set = set(selected)
-        self.input_entries = [e for e in self.input_entries if str(e["path"]) not in selected_set]
-        for iid in selected:
-            self.input_tree.delete(iid)
+        self.input_entries = [entry for entry in self.input_entries if str(entry["path"]) not in selected_set]
+        for item_id in selected:
+            self.input_tree.delete(item_id)
 
     def clear_inputs(self):
         self.input_entries.clear()
-        for iid in self.input_tree.get_children():
-            self.input_tree.delete(iid)
+        for item_id in self.input_tree.get_children():
+            self.input_tree.delete(item_id)
 
     def choose_output_folder(self):
-        folder = filedialog.askdirectory(title="เลือก output folder")
+        folder = filedialog.askdirectory(title=self.t("dlg_select_output"))
         if folder:
             self.output_dir_var.set(folder)
 
@@ -507,16 +557,16 @@ class App(tk.Tk):
         if self.is_running:
             return
 
-        input_configs = [{"path": e["path"], "prefix": e.get("prefix", "")} for e in self.input_entries]
+        input_configs = [{"path": entry["path"], "prefix": entry.get("prefix", "")} for entry in self.input_entries]
         output_dir_text = self.output_dir_var.get().strip()
         mode = self.mode_var.get()
         clear_output_first = self.clear_output_var.get()
 
         if not input_configs:
-            messagebox.showwarning(APP_TITLE, "กรุณาเลือก input folder อย่างน้อย 1 โฟลเดอร์")
+            messagebox.showwarning(self.t("app_title"), self.t("msg_need_input"))
             return
         if not output_dir_text:
-            messagebox.showwarning(APP_TITLE, "กรุณาเลือก output folder")
+            messagebox.showwarning(self.t("app_title"), self.t("msg_need_output"))
             return
 
         output_dir = Path(output_dir_text)
@@ -533,11 +583,11 @@ class App(tk.Tk):
 
     def _run_process(self, input_configs, output_dir, mode, clear_output_first):
         try:
-            process_media(input_configs, output_dir, mode, clear_output_first, self.logger)
-            self.after(0, lambda: messagebox.showinfo(APP_TITLE, "ทำเสร็จแล้ว"))
-        except Exception as e:
-            self.logger.write(f"ERROR: {e}")
-            self.after(0, lambda: messagebox.showerror(APP_TITLE, str(e)))
+            process_media(input_configs, output_dir, mode, clear_output_first, self.logger, self.t)
+            self.after(0, lambda: messagebox.showinfo(self.t("app_title"), self.t("msg_done")))
+        except Exception as exc:
+            self.logger.write(f"ERROR: {exc}")
+            self.after(0, lambda: messagebox.showerror(self.t("app_title"), str(exc)))
         finally:
             self.is_running = False
             self.after(0, lambda: self.start_btn.configure(state="normal"))
