@@ -221,7 +221,7 @@ jobs:
           $wxs = @(
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">',
-            "  <Product Id=\"*\" Name=\"ImageMerge\" Language=\"1033\" Version=\"$msiVersion\" Manufacturer=\"TamKungZ_\" UpgradeCode=\"C5A07E9D-9634-44F0-8D8E-050A2F31A8E9\">",
+            ('  <Product Id="*" Name="ImageMerge" Language="1033" Version="{0}" Manufacturer="TamKungZ_" UpgradeCode="C5A07E9D-9634-44F0-8D8E-050A2F31A8E9">' -f $msiVersion),
             '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />',
             '    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />',
             '    <MediaTemplate EmbedCab="yes" />',
@@ -229,7 +229,7 @@ jobs:
             '    <Property Id="ARPURLINFOABOUT" Value="https://github.com" />',
             '    <Property Id="ARPHELPLINK" Value="https://github.com" />',
             '    <Property Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" />',
-            "    <Icon Id=\"AppIcon.ico\" SourceFile=\"$iconPath\" />",
+            ('    <Icon Id="AppIcon.ico" SourceFile="{0}" />' -f $iconPath),
             '    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />',
             '    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />',
             '    <UIRef Id="WixUI_InstallDir" />',
