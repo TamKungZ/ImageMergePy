@@ -29,3 +29,8 @@ pip-wheel-metadata/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Signing secrets
+*.pfx
+*.p12
+*.pem

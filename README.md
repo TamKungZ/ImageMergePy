@@ -53,6 +53,8 @@ build.bat
 
 Build step will auto-generate `embedded_locales.py` from `locales/*.json` before compiling.
 
+Windows build also reads `app_metadata.json` and injects version/company/product metadata into the executable.
+
 `build_nuitka.py` detects the current OS and builds native output:
 
 - **Windows**: PE executable (`ImageMerge.exe`) under `dist/windows/ImageMerge.dist/`
@@ -79,6 +81,31 @@ python -m pip install -U "Nuitka[onefile]" zstandard
 ```
 
 Also exclude your build folder from Windows Defender/antivirus scan during build.
+
+## Windows Metadata + Trust
+
+Set app metadata in `app_metadata.json`:
+
+- `company_name`, `product_name`, `file_description`
+- `file_version`, `product_version`
+- `icon_ico` (optional `.ico` path)
+
+Optional signing is supported during build:
+
+```powershell
+$env:IMAGEMERGE_SIGN=1
+$env:IMAGEMERGE_SIGN_PFX="C:\secure\codesign.pfx"
+$env:IMAGEMERGE_SIGN_PASSWORD="<pfx-password>"
+$env:IMAGEMERGE_SIGN_TIMESTAMP="http://timestamp.digicert.com"
+./build.bat
+```
+
+For better SmartScreen reputation in production:
+
+- Use a valid OV/EV code-signing certificate (EV is fastest for reputation).
+- Keep publisher name consistent across releases.
+- Sign both executable and installer.
+- Avoid frequent publisher/certificate changes.
 
 ## Notes
 

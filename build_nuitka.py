@@ -1,3 +1,4 @@
+import json
 import os
 import platform
 import shutil
@@ -8,6 +9,7 @@ from pathlib import Path
 
 APP_NAME = "ImageMerge"
 ENTRY_FILE = "MainApp.py"
+METADATA_FILE = "app_metadata.json"
 
 
 def run_cmd(cmd: list[str], cwd: Path, retries: int = 1, retry_cleanup=None):
@@ -51,6 +53,94 @@ def clean_build_artifacts(output_dir: Path):
             pass
 
 
+def load_app_metadata(root: Path) -> dict[str, str]:
+    defaults = {
+        "app_name": APP_NAME,
+        "company_name": "",
+        "product_name": APP_NAME,
+        "file_description": APP_NAME,
+        "file_version": "1.0.0.0",
+        "product_version": "1.0.0.0",
+        "copyright": "",
+        "icon_ico": "",
+    }
+
+    metadata_path = root / METADATA_FILE
+    if not metadata_path.exists():
+        return defaults
+
+    with open(metadata_path, "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid metadata format in {metadata_path}")
+
+    for key in defaults:
+        value = data.get(key, defaults[key])
+        defaults[key] = str(value).strip()
+
+    return defaults
+
+
+def windows_metadata_args(root: Path, metadata: dict[str, str]) -> list[str]:
+    args = []
+
+    if metadata["company_name"]:
+        args.append(f"--company-name={metadata['company_name']}")
+    if metadata["product_name"]:
+        args.append(f"--product-name={metadata['product_name']}")
+    if metadata["file_description"]:
+        args.append(f"--file-description={metadata['file_description']}")
+    if metadata["file_version"]:
+        args.append(f"--file-version={metadata['file_version']}")
+    if metadata["product_version"]:
+        args.append(f"--product-version={metadata['product_version']}")
+    if metadata["copyright"]:
+        args.append(f"--copyright={metadata['copyright']}")
+
+    icon_relative = metadata.get("icon_ico", "")
+    if icon_relative:
+        icon_path = root / icon_relative
+        if icon_path.exists():
+            args.append(f"--windows-icon-from-ico={icon_path}")
+        else:
+            print(f"Icon not found, skipping icon metadata: {icon_path}")
+
+    return args
+
+
+def sign_windows_binary(binary_path: Path):
+    if os.environ.get("IMAGEMERGE_SIGN", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        return
+
+    pfx_path = os.environ.get("IMAGEMERGE_SIGN_PFX", "").strip()
+    pfx_password = os.environ.get("IMAGEMERGE_SIGN_PASSWORD", "").strip()
+    timestamp_url = os.environ.get("IMAGEMERGE_SIGN_TIMESTAMP", "http://timestamp.digicert.com").strip()
+
+    if not pfx_path or not pfx_password:
+        raise RuntimeError("Signing requested but IMAGEMERGE_SIGN_PFX / IMAGEMERGE_SIGN_PASSWORD not set")
+
+    sign_cmd = [
+        "signtool",
+        "sign",
+        "/fd",
+        "SHA256",
+        "/f",
+        pfx_path,
+        "/p",
+        pfx_password,
+        "/tr",
+        timestamp_url,
+        "/td",
+        "SHA256",
+        str(binary_path),
+    ]
+    run_cmd(sign_cmd, binary_path.parent)
+
+    verify_cmd = ["signtool", "verify", "/pa", "/v", str(binary_path)]
+    run_cmd(verify_cmd, binary_path.parent)
+
+
 def nuitka_base_cmd(output_dir: Path) -> list[str]:
     return [
         sys.executable,
@@ -85,16 +175,24 @@ def run_build_with_fallback(root: Path, out_dir: Path, onefile_args: list[str], 
 
 def build_windows(root: Path):
     out_dir = root / "dist" / "windows"
+    metadata = load_app_metadata(root)
+    metadata_args = windows_metadata_args(root, metadata)
+
     mode = run_build_with_fallback(
         root,
         out_dir,
-        ["--onefile", "--onefile-no-compression", "--windows-console-mode=disable"],
-        ["--windows-console-mode=disable"],
+        ["--onefile", "--onefile-no-compression", "--windows-console-mode=disable", *metadata_args],
+        ["--windows-console-mode=disable", *metadata_args],
     )
+    binary_path = out_dir / (APP_NAME + ".exe")
     if mode == "onefile":
-        print(f"PE build ready: {out_dir / (APP_NAME + '.exe')}")
+        binary_path = out_dir / (APP_NAME + ".exe")
+        print(f"PE build ready: {binary_path}")
     else:
-        print(f"PE build ready: {out_dir / (APP_NAME + '.dist') / (APP_NAME + '.exe')}")
+        binary_path = out_dir / (APP_NAME + ".dist") / (APP_NAME + ".exe")
+        print(f"PE build ready: {binary_path}")
+
+    sign_windows_binary(binary_path)
 
 
 def build_linux(root: Path):
