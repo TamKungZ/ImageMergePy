@@ -51,6 +51,8 @@ Then use the build scripts (or run `python build_nuitka.py` directly):
 build.bat
 ```
 
+Build step will auto-generate `embedded_locales.py` from `locales/*.json` before compiling.
+
 `build_nuitka.py` detects the current OS and builds native output:
 
 - **Windows**: PE executable (`ImageMerge.exe`) under `dist/windows/ImageMerge.dist/`
@@ -81,5 +83,6 @@ Also exclude your build folder from Windows Defender/antivirus scan during build
 ## Notes
 
 - UI translations are embedded in code (no external locale files required at runtime).
+- Source translation files are in `locales/en.json` and `locales/th.json`; embedded module is generated to `embedded_locales.py`.
 - Kanit fonts are embedded in code and loaded at runtime (no external font files required at runtime).
 - Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.

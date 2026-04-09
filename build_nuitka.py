@@ -125,6 +125,8 @@ def main():
     root = Path(__file__).resolve().parent
     system = platform.system().lower()
 
+    run_cmd([sys.executable, "generate_embedded_locales.py"], root)
+
     if system == "windows":
         build_windows(root)
     elif system == "linux":
