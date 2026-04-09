@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import locale
 import os
 import re
 import shutil
@@ -14,6 +13,7 @@ from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -52,6 +52,9 @@ EMBEDDED_LOCALES: dict[str, dict[str, str]] = {
         "app_title": "ImageMerge",
         "app_header": "ImageMerge / Dedupe Tool",
         "app_desc": "Merge media from multiple folders, de-duplicate by SHA-256 + extension, rename with sequence numbers, keep images first and videos last, and set a per-folder prefix.",
+        "label_language": "Language",
+        "lang_en": "English",
+        "lang_th": "Thai",
         "section_input": "Input folders + prefix",
         "section_output": "Output folder",
         "section_mode": "Mode",
@@ -110,6 +113,9 @@ EMBEDDED_LOCALES: dict[str, dict[str, str]] = {
         "app_title": "ImageMerge",
         "app_header": "ImageMerge / เครื่องมือรวมและกันไฟล์ซ้ำ",
         "app_desc": "รวมไฟล์รูปและวิดีโอจากหลายโฟลเดอร์, กันไฟล์ซ้ำด้วย SHA-256 + นามสกุลไฟล์, ตั้งชื่อใหม่แบบลำดับเลข, จัดรูปไว้ก่อนและวิดีโอไว้ท้าย, และตั้ง prefix แยกตามโฟลเดอร์ได้",
+        "label_language": "ภาษา",
+        "lang_en": "อังกฤษ",
+        "lang_th": "ไทย",
         "section_input": "โฟลเดอร์ต้นทาง + prefix",
         "section_output": "โฟลเดอร์ปลายทาง",
         "section_mode": "โหมดการทำงาน",
@@ -231,9 +237,6 @@ def detect_language() -> str:
     env_lang = os.environ.get("IMAGEMERGE_LANG", "").strip().lower()
     if env_lang in SUPPORTED_LANGS:
         return env_lang
-    local_lang, _ = locale.getdefaultlocale()
-    if local_lang and local_lang.lower().startswith("th"):
-        return "th"
     return DEFAULT_LANG
 
 
@@ -629,17 +632,27 @@ class App(QMainWindow):
             % self.font_family
         )
 
-        header = QLabel(self.t("app_header"))
-        header.setObjectName("header")
-        outer.addWidget(header)
+        top_row = QHBoxLayout()
+        self.header_label = QLabel(self.t("app_header"))
+        self.header_label.setObjectName("header")
+        top_row.addWidget(self.header_label)
+        top_row.addStretch(1)
+        self.language_label = QLabel(self.t("label_language"))
+        top_row.addWidget(self.language_label)
+        self.language_selector = QComboBox()
+        self.language_selector.addItem("", "en")
+        self.language_selector.addItem("", "th")
+        self.language_selector.currentIndexChanged.connect(self._on_language_changed)
+        top_row.addWidget(self.language_selector)
+        outer.addLayout(top_row)
 
-        desc = QLabel(self.t("app_desc"))
-        desc.setObjectName("desc")
-        desc.setWordWrap(True)
-        outer.addWidget(desc)
+        self.desc_label = QLabel(self.t("app_desc"))
+        self.desc_label.setObjectName("desc")
+        self.desc_label.setWordWrap(True)
+        outer.addWidget(self.desc_label)
 
-        input_group = QGroupBox(self.t("section_input"))
-        input_layout = QVBoxLayout(input_group)
+        self.input_group = QGroupBox(self.t("section_input"))
+        input_layout = QVBoxLayout(self.input_group)
         input_layout.setSpacing(8)
 
         input_btn_row = QHBoxLayout()
@@ -667,20 +680,20 @@ class App(QMainWindow):
         self.input_tree.setAlternatingRowColors(True)
         self.input_tree.itemDoubleClicked.connect(lambda _item, _col: self.edit_selected_prefix())
         input_layout.addWidget(self.input_tree)
-        outer.addWidget(input_group)
+        outer.addWidget(self.input_group)
 
-        output_group = QGroupBox(self.t("section_output"))
-        output_layout = QHBoxLayout(output_group)
+        self.output_group = QGroupBox(self.t("section_output"))
+        output_layout = QHBoxLayout(self.output_group)
         self.output_input = QLineEdit()
         self.output_input.setPlaceholderText(self.t("section_output"))
         self.output_btn = QPushButton(self.t("btn_select_output"))
         self.output_btn.clicked.connect(self.choose_output_folder)
         output_layout.addWidget(self.output_input)
         output_layout.addWidget(self.output_btn)
-        outer.addWidget(output_group)
+        outer.addWidget(self.output_group)
 
-        mode_group = QGroupBox(self.t("section_mode"))
-        mode_layout = QVBoxLayout(mode_group)
+        self.mode_group = QGroupBox(self.t("section_mode"))
+        mode_layout = QVBoxLayout(self.mode_group)
 
         self.radio_copy_keep = QRadioButton(self.t("mode_copy_keep"))
         self.radio_copy_keep.setChecked(True)
@@ -694,11 +707,11 @@ class App(QMainWindow):
         self.clear_output_checkbox = QCheckBox(self.t("opt_clear_output"))
         mode_layout.addWidget(self.clear_output_checkbox)
 
-        mode_note = QLabel(self.t("mode_note"))
-        mode_note.setWordWrap(True)
-        mode_layout.addWidget(mode_note)
+        self.mode_note_label = QLabel(self.t("mode_note"))
+        self.mode_note_label.setWordWrap(True)
+        mode_layout.addWidget(self.mode_note_label)
 
-        outer.addWidget(mode_group)
+        outer.addWidget(self.mode_group)
 
         action_row = QHBoxLayout()
         self.start_btn = QPushButton(self.t("btn_start"))
@@ -707,12 +720,53 @@ class App(QMainWindow):
         action_row.addStretch(1)
         outer.addLayout(action_row)
 
-        log_group = QGroupBox(self.t("section_log"))
-        log_layout = QVBoxLayout(log_group)
+        self.log_group = QGroupBox(self.t("section_log"))
+        log_layout = QVBoxLayout(self.log_group)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         log_layout.addWidget(self.log_text)
-        outer.addWidget(log_group, 1)
+        outer.addWidget(self.log_group, 1)
+
+        lang_index = self.language_selector.findData(self.i18n.lang)
+        if lang_index >= 0:
+            self.language_selector.setCurrentIndex(lang_index)
+
+        self._retranslate_ui()
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
+        self.header_label.setText(self.t("app_header"))
+        self.desc_label.setText(self.t("app_desc"))
+        self.language_label.setText(self.t("label_language"))
+        self.language_selector.setItemText(0, self.t("lang_en"))
+        self.language_selector.setItemText(1, self.t("lang_th"))
+
+        self.input_group.setTitle(self.t("section_input"))
+        self.output_group.setTitle(self.t("section_output"))
+        self.mode_group.setTitle(self.t("section_mode"))
+        self.log_group.setTitle(self.t("section_log"))
+
+        self.add_folder_btn.setText(self.t("btn_add_folder"))
+        self.edit_prefix_btn.setText(self.t("btn_edit_prefix"))
+        self.remove_btn.setText(self.t("btn_remove_selected"))
+        self.clear_btn.setText(self.t("btn_clear_all"))
+        self.output_btn.setText(self.t("btn_select_output"))
+        self.start_btn.setText(self.t("btn_start"))
+
+        self.input_tree.setHeaderLabels([self.t("col_folder"), self.t("col_prefix")])
+        self.output_input.setPlaceholderText(self.t("section_output"))
+        self.radio_copy_keep.setText(self.t("mode_copy_keep"))
+        self.radio_copy_delete.setText(self.t("mode_copy_delete"))
+        self.radio_move.setText(self.t("mode_move"))
+        self.clear_output_checkbox.setText(self.t("opt_clear_output"))
+        self.mode_note_label.setText(self.t("mode_note"))
+
+    def _on_language_changed(self, _index: int):
+        lang_code = self.language_selector.currentData()
+        if lang_code not in SUPPORTED_LANGS or lang_code == self.i18n.lang:
+            return
+        self.i18n.lang = lang_code
+        self._retranslate_ui()
 
     def prompt_prefix(self, initial: str = "") -> str | None:
         value, accepted = QInputDialog.getText(
