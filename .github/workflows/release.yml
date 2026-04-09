@@ -212,7 +212,7 @@ jobs:
             '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">',
             '  <Product Id="*" Name="ImageMerge" Language="1033" Version="1.0.0" Manufacturer="TamKungZ_" UpgradeCode="C5A07E9D-9634-44F0-8D8E-050A2F31A8E9">',
             '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />',
-            '    <MediaTemplate />',
+            '    <MediaTemplate EmbedCab="yes" />',
             '    <Feature Id="MainFeature" Title="ImageMerge" Level="1">',
             '      <ComponentGroupRef Id="ImageMergeFiles" />',
             '    </Feature>',
@@ -233,7 +233,10 @@ jobs:
 
           $wixArch = if ($archLabel -eq "x86") { "x86" } else { "x64" }
           candle -dSourceDir="$distDir" installer\ImageMerge.wxs installer\ImageMergeFiles.wxs -arch $wixArch
-          light ImageMerge.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
+          light -spdb ImageMerge.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
+
+          if (Test-Path "cab1.cab") { Remove-Item "cab1.cab" -Force }
+          Get-ChildItem -Path . -Filter "*.wixpdb" -ErrorAction SilentlyContinue | Remove-Item -Force
 
       - name: Pack release archives
         shell: bash
