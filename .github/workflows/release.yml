@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     name: Package (${{ matrix.os }})
@@ -51,13 +54,41 @@ jobs:
                   raise FileNotFoundError(f'Missing build output: {source_dir}')
               shutil.make_archive(str(out / name), 'zip', root_dir=source_dir.parent, base_dir=source_dir.name)
 
+          def first_existing(candidates):
+              for candidate in candidates:
+                  if candidate.exists():
+                      return candidate
+              return None
+
           if runner == 'Windows':
-              zip_dir('ImageMerge-windows-x64', root / 'dist' / 'windows' / 'MainApp.dist')
+              dist_dir = first_existing([
+                  root / 'dist' / 'windows' / 'MainApp.dist',
+                  root / 'dist' / 'windows' / 'ImageMerge.dist',
+              ])
+              if dist_dir is None:
+                  raise FileNotFoundError('Missing Windows dist folder (MainApp.dist/ImageMerge.dist)')
+              zip_dir('ImageMerge-windows-x64', dist_dir)
           elif runner == 'Linux':
-              zip_dir('ImageMerge-linux-x64', root / 'dist' / 'linux' / 'MainApp.dist')
+              dist_dir = first_existing([
+                  root / 'dist' / 'linux' / 'MainApp.dist',
+                  root / 'dist' / 'linux' / 'ImageMerge.dist',
+              ])
+              if dist_dir is None:
+                  raise FileNotFoundError('Missing Linux dist folder (MainApp.dist/ImageMerge.dist)')
+              zip_dir('ImageMerge-linux-x64', dist_dir)
           elif runner == 'macOS':
-              zip_dir('ImageMerge-macos-binary', root / 'dist' / 'macos-binary' / 'MainApp.dist')
-              zip_dir('ImageMerge-macos-app', root / 'dist' / 'macos-app' / 'ImageMerge.app')
+              dist_dir = first_existing([
+                  root / 'dist' / 'macos-binary' / 'MainApp.dist',
+                  root / 'dist' / 'macos-binary' / 'ImageMerge.dist',
+              ])
+              if dist_dir is None:
+                  raise FileNotFoundError('Missing macOS binary dist folder (MainApp.dist/ImageMerge.dist)')
+              zip_dir('ImageMerge-macos-binary', dist_dir)
+
+              app_candidates = sorted((root / 'dist' / 'macos-app').glob('*.app'))
+              if not app_candidates:
+                  raise FileNotFoundError('Missing macOS app bundle (*.app) in dist/macos-app')
+              zip_dir('ImageMerge-macos-app', app_candidates[0])
           else:
               raise RuntimeError(f'Unsupported RUNNER_OS: {runner}')
           PY
