@@ -207,27 +207,27 @@ jobs:
 
           heat dir "$distDir" -cg ImageMergeFiles -dr INSTALLFOLDER -scom -sreg -srd -gg -var var.SourceDir -out installer\ImageMergeFiles.wxs
 
-          $wxs = @"
-<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="ImageMerge" Language="1033" Version="1.0.0" Manufacturer="TamKungZ_" UpgradeCode="C5A07E9D-9634-44F0-8D8E-050A2F31A8E9">
-    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
-    <MediaTemplate />
-    <Feature Id="MainFeature" Title="ImageMerge" Level="1">
-      <ComponentGroupRef Id="ImageMergeFiles" />
-    </Feature>
-  </Product>
-
-  <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="ImageMerge" />
-      </Directory>
-    </Directory>
-  </Fragment>
-
-</Wix>
-"@
+          $wxs = @(
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">',
+            '  <Product Id="*" Name="ImageMerge" Language="1033" Version="1.0.0" Manufacturer="TamKungZ_" UpgradeCode="C5A07E9D-9634-44F0-8D8E-050A2F31A8E9">',
+            '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />',
+            '    <MediaTemplate />',
+            '    <Feature Id="MainFeature" Title="ImageMerge" Level="1">',
+            '      <ComponentGroupRef Id="ImageMergeFiles" />',
+            '    </Feature>',
+            '  </Product>',
+            '',
+            '  <Fragment>',
+            '    <Directory Id="TARGETDIR" Name="SourceDir">',
+            '      <Directory Id="ProgramFiles64Folder">',
+            '        <Directory Id="INSTALLFOLDER" Name="ImageMerge" />',
+            '      </Directory>',
+            '    </Directory>',
+            '  </Fragment>',
+            '',
+            '</Wix>'
+          ) -join "`n"
 
           Set-Content -Path installer\ImageMerge.wxs -Value $wxs -Encoding UTF8
 
