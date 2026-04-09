@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import locale
 import os
@@ -8,8 +9,8 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QByteArray, QObject, Qt, QThread, Signal
+from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -30,6 +31,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from embedded_fonts import EMBEDDED_FONTS
 
 APP_FALLBACK_TITLE = "ImageMerge"
 
@@ -172,6 +175,18 @@ PREFIX_ALLOWED_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 
 
 def setup_app_fonts() -> str:
+    for encoded_data in EMBEDDED_FONTS.values():
+        try:
+            font_bytes = base64.b64decode(encoded_data)
+            font_id = QFontDatabase.addApplicationFontFromData(QByteArray(font_bytes))
+            if font_id == -1:
+                continue
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            if families:
+                return families[0]
+        except Exception:
+            continue
+
     if os.name == "nt":
         return "Leelawadee UI"
     if sys.platform == "darwin":

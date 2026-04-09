@@ -81,5 +81,5 @@ Also exclude your build folder from Windows Defender/antivirus scan during build
 ## Notes
 
 - UI translations are embedded in code (no external locale files required at runtime).
-- The app uses platform fonts by default.
+- Kanit fonts are embedded in code and loaded at runtime (no external font files required at runtime).
 - Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.
