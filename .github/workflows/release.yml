@@ -193,6 +193,17 @@ jobs:
           }
           if (-not $distDir) { throw "Missing Windows dist folder (MainApp.dist/ImageMerge.dist)" }
 
+          if (-not (Test-Path "app_metadata.json")) { throw "Missing app_metadata.json" }
+          $meta = Get-Content "app_metadata.json" -Raw | ConvertFrom-Json
+          $productVersionRaw = [string]$meta.product_version
+          if ([string]::IsNullOrWhiteSpace($productVersionRaw)) { $productVersionRaw = "1.0.1.0" }
+
+          $versionParts = $productVersionRaw.Split('.')
+          while ($versionParts.Count -lt 3) { $versionParts += "0" }
+          $msiVersion = "$($versionParts[0]).$($versionParts[1]).$($versionParts[2])"
+
+          $iconPath = (Resolve-Path "assets/icon.ico").Path
+
           $archRaw = ($env:PROCESSOR_ARCHITECTURE + "").ToLowerInvariant()
           $archLabel = switch ($archRaw) {
             "amd64" { "x64" }
@@ -210,20 +221,48 @@ jobs:
           $wxs = @(
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">',
-            '  <Product Id="*" Name="ImageMerge" Language="1033" Version="1.0.0" Manufacturer="TamKungZ_" UpgradeCode="C5A07E9D-9634-44F0-8D8E-050A2F31A8E9">',
+            "  <Product Id=\"*\" Name=\"ImageMerge\" Language=\"1033\" Version=\"$msiVersion\" Manufacturer=\"TamKungZ_\" UpgradeCode=\"C5A07E9D-9634-44F0-8D8E-050A2F31A8E9\">",
             '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />',
+            '    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />',
             '    <MediaTemplate EmbedCab="yes" />',
+            '    <Property Id="ARPCONTACT" Value="TamKungZ_" />',
+            '    <Property Id="ARPURLINFOABOUT" Value="https://github.com" />',
+            '    <Property Id="ARPHELPLINK" Value="https://github.com" />',
+            '    <Property Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" />',
+            "    <Icon Id=\"AppIcon.ico\" SourceFile=\"$iconPath\" />",
+            '    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />',
+            '    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />',
+            '    <UIRef Id="WixUI_InstallDir" />',
             '    <Feature Id="MainFeature" Title="ImageMerge" Level="1">',
             '      <ComponentGroupRef Id="ImageMergeFiles" />',
+            '      <ComponentGroupRef Id="ImageMergeShortcuts" />',
             '    </Feature>',
             '  </Product>',
             '',
             '  <Fragment>',
             '    <Directory Id="TARGETDIR" Name="SourceDir">',
-            '      <Directory Id="ProgramFiles64Folder">',
+            '      <Directory Id="ProgramFilesFolder">',
             '        <Directory Id="INSTALLFOLDER" Name="ImageMerge" />',
             '      </Directory>',
+            '      <Directory Id="ProgramMenuFolder">',
+            '        <Directory Id="ImageMergeProgramMenuFolder" Name="ImageMerge" />',
+            '      </Directory>',
+            '      <Directory Id="DesktopFolder" />',
             '    </Directory>',
+            '  </Fragment>',
+            '',
+            '  <Fragment>',
+            '    <ComponentGroup Id="ImageMergeShortcuts">',
+            '      <Component Id="StartMenuShortcutComponent" Directory="ImageMergeProgramMenuFolder" Guid="*">',
+            '        <Shortcut Id="StartMenuShortcut" Name="ImageMerge" Description="ImageMerge" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />',
+            '        <RemoveFolder Id="RemoveImageMergeProgramMenuFolder" On="uninstall" />',
+            '        <RegistryValue Root="HKCU" Key="Software\\TamKungZ_\\ImageMerge" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />',
+            '      </Component>',
+            '      <Component Id="DesktopShortcutComponent" Directory="DesktopFolder" Guid="*">',
+            '        <Shortcut Id="DesktopShortcut" Name="ImageMerge" Description="ImageMerge" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />',
+            '        <RegistryValue Root="HKCU" Key="Software\\TamKungZ_\\ImageMerge" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />',
+            '      </Component>',
+            '    </ComponentGroup>',
             '  </Fragment>',
             '',
             '</Wix>'
@@ -233,7 +272,7 @@ jobs:
 
           $wixArch = if ($archLabel -eq "x86") { "x86" } else { "x64" }
           candle -dSourceDir="$distDir" installer\ImageMerge.wxs installer\ImageMergeFiles.wxs -arch $wixArch
-          light -spdb ImageMerge.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
+          light -spdb -ext WixUIExtension ImageMerge.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
 
           if (Test-Path "cab1.cab") { Remove-Item "cab1.cab" -Force }
           Get-ChildItem -Path . -Filter "*.wixpdb" -ErrorAction SilentlyContinue | Remove-Item -Force
