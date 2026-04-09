@@ -65,6 +65,12 @@ Windows build also reads `app_metadata.json` and injects version/company/product
 
 Note: cross-compiling to another OS is not configured; run the build on each target OS.
 
+Architecture notes:
+
+- Default CI runners currently publish x64 artifacts.
+- The build scripts recognize these architecture labels: `x86`, `x64`, `arm`, `arm64`.
+- To declare a target architecture in local/self-hosted builds, set `IMAGEMERGE_TARGET_ARCH` (cross-compilation toolchains are not auto-configured).
+
 Default build mode is `standalone` for reliability.
 
 To force `onefile` mode (experimental on some Windows + Python/Nuitka versions):

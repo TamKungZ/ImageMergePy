@@ -11,6 +11,20 @@ APP_NAME = "ImageMerge"
 ENTRY_FILE = "MainApp.py"
 METADATA_FILE = "app_metadata.json"
 
+ARCH_ALIASES = {
+    "x86": "x86",
+    "i386": "x86",
+    "i686": "x86",
+    "x64": "x64",
+    "amd64": "x64",
+    "x86_64": "x64",
+    "arm": "arm",
+    "armv7l": "arm",
+    "armv6l": "arm",
+    "arm64": "arm64",
+    "aarch64": "arm64",
+}
+
 
 def run_cmd(cmd: list[str], cwd: Path, retries: int = 1, retry_cleanup=None):
     print("$", " ".join(cmd))
@@ -31,6 +45,36 @@ def run_cmd(cmd: list[str], cwd: Path, retries: int = 1, retry_cleanup=None):
             time.sleep(1.5)
 
     raise last_error
+
+
+def normalize_arch(arch_value: str) -> str:
+    key = (arch_value or "").strip().lower()
+    return ARCH_ALIASES.get(key, key)
+
+
+def detect_host_arch() -> str:
+    machine = platform.machine().strip().lower()
+    return normalize_arch(machine)
+
+
+def resolve_target_arch() -> tuple[str, str]:
+    host_arch = detect_host_arch()
+    requested = normalize_arch(os.environ.get("IMAGEMERGE_TARGET_ARCH", ""))
+    target_arch = requested or host_arch
+
+    if target_arch not in set(ARCH_ALIASES.values()):
+        raise RuntimeError(
+            f"Unsupported IMAGEMERGE_TARGET_ARCH='{target_arch}'. "
+            f"Known targets: {', '.join(sorted(set(ARCH_ALIASES.values())))}"
+        )
+
+    if requested and requested != host_arch:
+        print(
+            f"Requested target arch '{requested}' differs from host arch '{host_arch}'. "
+            "Cross-compilation is not configured; build will use host toolchain."
+        )
+
+    return host_arch, target_arch
 
 
 def clean_build_artifacts(output_dir: Path):
@@ -222,6 +266,10 @@ def build_macos(root: Path):
 def main():
     root = Path(__file__).resolve().parent
     system = platform.system().lower()
+    host_arch, target_arch = resolve_target_arch()
+
+    print(f"Build host architecture: {host_arch}")
+    print(f"Requested target architecture: {target_arch}")
 
     run_cmd([sys.executable, "generate_embedded_locales.py"], root)
 

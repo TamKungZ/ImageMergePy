@@ -133,13 +133,45 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           if [ -z "$VERSION" ]; then VERSION="0.0.0"; fi
 
-          fpm -s dir -t deb -n imagemerge -v "$VERSION" --iteration 1 --architecture amd64 --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" -C pkgroot .
-          mv imagemerge_*_amd64.deb release_assets/ImageMerge-linux-x64.deb
+          ARCH_RAW="$(uname -m)"
+          case "$ARCH_RAW" in
+            x86_64|amd64)
+              ARCH_LABEL="x64"
+              DEB_ARCH="amd64"
+              RPM_ARCH="x86_64"
+              ;;
+            aarch64|arm64)
+              ARCH_LABEL="arm64"
+              DEB_ARCH="arm64"
+              RPM_ARCH="aarch64"
+              ;;
+            armv7l|armv6l|arm)
+              ARCH_LABEL="arm"
+              DEB_ARCH="armhf"
+              RPM_ARCH="armhfp"
+              ;;
+            i386|i686|x86)
+              ARCH_LABEL="x86"
+              DEB_ARCH="i386"
+              RPM_ARCH="i386"
+              ;;
+            *)
+              ARCH_LABEL="x64"
+              DEB_ARCH="amd64"
+              RPM_ARCH="x86_64"
+              ;;
+          esac
 
-          fpm -s dir -t rpm -n imagemerge -v "$VERSION" --iteration 1 --architecture x86_64 --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" -C pkgroot .
-          mv imagemerge-*.x86_64.rpm release_assets/ImageMerge-linux-x64.rpm
+          fpm -s dir -t deb -n imagemerge -v "$VERSION" --iteration 1 --architecture "$DEB_ARCH" --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" -C pkgroot .
+          mv imagemerge_*_"$DEB_ARCH".deb release_assets/ImageMerge-linux-"$ARCH_LABEL".deb
 
-          APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 ./appimagetool ImageMerge.AppDir release_assets/ImageMerge-linux-x64.AppImage
+          fpm -s dir -t rpm -n imagemerge -v "$VERSION" --iteration 1 --architecture "$RPM_ARCH" --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" -C pkgroot .
+          mv imagemerge-*.$RPM_ARCH.rpm release_assets/ImageMerge-linux-"$ARCH_LABEL".rpm
+
+          APPIMAGE_ARCH="$ARCH_RAW"
+          if [ "$ARCH_RAW" = "amd64" ]; then APPIMAGE_ARCH="x86_64"; fi
+          if [ "$ARCH_RAW" = "arm64" ]; then APPIMAGE_ARCH="aarch64"; fi
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$APPIMAGE_ARCH" ./appimagetool ImageMerge.AppDir release_assets/ImageMerge-linux-"$ARCH_LABEL".AppImage
 
       - name: Install WiX Toolset
         if: runner.os == 'Windows'
@@ -160,6 +192,15 @@ jobs:
             if (Test-Path $candidate) { $distDir = $candidate; break }
           }
           if (-not $distDir) { throw "Missing Windows dist folder (MainApp.dist/ImageMerge.dist)" }
+
+          $archRaw = ($env:PROCESSOR_ARCHITECTURE + "").ToLowerInvariant()
+          $archLabel = switch ($archRaw) {
+            "amd64" { "x64" }
+            "x86" { "x86" }
+            "arm64" { "arm64" }
+            "arm" { "arm" }
+            default { "x64" }
+          }
 
           New-Item -ItemType Directory -Force -Path installer | Out-Null
           New-Item -ItemType Directory -Force -Path release_assets | Out-Null
@@ -190,8 +231,9 @@ jobs:
 
           Set-Content -Path installer\ImageMerge.wxs -Value $wxs -Encoding UTF8
 
-          candle -dSourceDir="$distDir" installer\ImageMerge.wxs installer\ImageMergeFiles.wxs -arch x64
-          light installer\ImageMerge.wixobj installer\ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-x64.msi
+          $wixArch = if ($archLabel -eq "x86") { "x86" } else { "x64" }
+          candle -dSourceDir="$distDir" installer\ImageMerge.wxs installer\ImageMergeFiles.wxs -arch $wixArch
+          light installer\ImageMerge.wixobj installer\ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
 
       - name: Pack release archives
         shell: bash
@@ -206,6 +248,23 @@ jobs:
           out.mkdir(parents=True, exist_ok=True)
           runner = os.environ.get('RUNNER_OS', '')
 
+          def normalize_arch(value: str) -> str:
+              arch = (value or '').strip().lower()
+              aliases = {
+                  'amd64': 'x64',
+                  'x86_64': 'x64',
+                  'x64': 'x64',
+                  'i386': 'x86',
+                  'i686': 'x86',
+                  'x86': 'x86',
+                  'aarch64': 'arm64',
+                  'arm64': 'arm64',
+                  'armv7l': 'arm',
+                  'armv6l': 'arm',
+                  'arm': 'arm',
+              }
+              return aliases.get(arch, 'x64')
+
           def zip_dir(name: str, source_dir: Path):
               if not source_dir.exists():
                   raise FileNotFoundError(f'Missing build output: {source_dir}')
@@ -218,34 +277,39 @@ jobs:
               return None
 
           if runner == 'Windows':
+              arch = normalize_arch(os.environ.get('PROCESSOR_ARCHITECTURE', ''))
               dist_dir = first_existing([
                   root / 'dist' / 'windows' / 'MainApp.dist',
                   root / 'dist' / 'windows' / 'ImageMerge.dist',
               ])
               if dist_dir is None:
                   raise FileNotFoundError('Missing Windows dist folder (MainApp.dist/ImageMerge.dist)')
-              zip_dir('ImageMerge-windows-x64', dist_dir)
+              zip_dir(f'ImageMerge-windows-{arch}', dist_dir)
           elif runner == 'Linux':
+              import platform
+              arch = normalize_arch(platform.machine())
               dist_dir = first_existing([
                   root / 'dist' / 'linux' / 'MainApp.dist',
                   root / 'dist' / 'linux' / 'ImageMerge.dist',
               ])
               if dist_dir is None:
                   raise FileNotFoundError('Missing Linux dist folder (MainApp.dist/ImageMerge.dist)')
-              zip_dir('ImageMerge-linux-x64', dist_dir)
+              zip_dir(f'ImageMerge-linux-{arch}', dist_dir)
           elif runner == 'macOS':
+              import platform
+              arch = normalize_arch(platform.machine())
               dist_dir = first_existing([
                   root / 'dist' / 'macos-binary' / 'MainApp.dist',
                   root / 'dist' / 'macos-binary' / 'ImageMerge.dist',
               ])
               if dist_dir is None:
                   raise FileNotFoundError('Missing macOS binary dist folder (MainApp.dist/ImageMerge.dist)')
-              zip_dir('ImageMerge-macos-binary', dist_dir)
+              zip_dir(f'ImageMerge-macos-binary-{arch}', dist_dir)
 
               app_candidates = sorted((root / 'dist' / 'macos-app').glob('*.app'))
               if not app_candidates:
                   raise FileNotFoundError('Missing macOS app bundle (*.app) in dist/macos-app')
-              zip_dir('ImageMerge-macos-app', app_candidates[0])
+              zip_dir(f'ImageMerge-macos-app-{arch}', app_candidates[0])
           else:
               raise RuntimeError(f'Unsupported RUNNER_OS: {runner}')
           PY
