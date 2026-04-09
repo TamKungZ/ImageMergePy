@@ -1,3 +1,4 @@
+import argparse
 import base64
 import hashlib
 import os
@@ -422,6 +423,96 @@ class ProcessWorker(QObject):
             self.finished.emit()
 
 
+def parse_cli_input(entry: str) -> dict:
+    raw = (entry or "").strip()
+    if not raw:
+        raise ValueError("Input entry cannot be empty")
+
+    if "::" in raw:
+        path_text, prefix_text = raw.rsplit("::", 1)
+    else:
+        path_text, prefix_text = raw, ""
+
+    path = Path(path_text).expanduser().resolve()
+    prefix = normalize_prefix(prefix_text)
+    return {"path": path, "prefix": prefix}
+
+
+def create_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog=APP_FALLBACK_TITLE,
+        description="ImageMerge CLI mode",
+    )
+    parser.add_argument(
+        "--cli",
+        action="store_true",
+        help="Run in CLI mode without opening GUI",
+    )
+    parser.add_argument(
+        "--input",
+        action="append",
+        default=[],
+        metavar="PATH[::PREFIX]",
+        help="Input folder entry, repeatable. Example: --input /media/full::full",
+    )
+    parser.add_argument(
+        "--output",
+        default="",
+        metavar="PATH",
+        help="Output folder path",
+    )
+    parser.add_argument(
+        "--mode",
+        default=MODE_COPY_KEEP,
+        choices=[MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE],
+        help="Process mode",
+    )
+    parser.add_argument(
+        "--clear-output",
+        action="store_true",
+        help="Clear media files in output before processing",
+    )
+    parser.add_argument(
+        "--lang",
+        default="",
+        choices=sorted(SUPPORTED_LANGS),
+        help="CLI log language",
+    )
+    return parser
+
+
+def run_cli(argv: list[str]) -> int:
+    parser = create_cli_parser()
+    args = parser.parse_args(argv)
+
+    run_cli_mode = args.cli or bool(args.input) or bool(args.output)
+    if not run_cli_mode:
+        parser.print_help()
+        return 0
+
+    if not args.input:
+        parser.error("--input is required in CLI mode")
+    if not args.output:
+        parser.error("--output is required in CLI mode")
+
+    input_configs = [parse_cli_input(entry) for entry in args.input]
+
+    lang = args.lang or detect_language()
+    tr = I18n(lang).t
+    output_dir = Path(args.output).expanduser().resolve()
+    logger = Logger(lambda text: print(text, flush=True))
+
+    process_media(
+        input_configs=input_configs,
+        output_dir=output_dir,
+        mode=args.mode,
+        clear_output_first=args.clear_output,
+        logger=logger,
+        tr=tr,
+    )
+    return 0
+
+
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -783,6 +874,15 @@ class App(QMainWindow):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        try:
+            sys.exit(run_cli(sys.argv[1:]))
+        except SystemExit:
+            raise
+        except Exception as exc:
+            print(f"ERROR: {exc}", file=sys.stderr, flush=True)
+            sys.exit(1)
+
     qt_app = QApplication(sys.argv)
     window = App()
     window.show()

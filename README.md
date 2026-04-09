@@ -33,6 +33,24 @@ pip install -r requirements.txt
 python MainApp.py
 ```
 
+## Run (CLI)
+
+Use CLI mode without opening GUI:
+
+```bash
+python MainApp.py --cli --input "/path/to/folderA::full" --input "/path/to/folderB::short" --output "/path/to/output" --mode copy_keep
+```
+
+CLI options:
+
+- `--input PATH[::PREFIX]` (repeatable)
+- `--output PATH`
+- `--mode copy_keep|copy_delete|move`
+- `--clear-output`
+- `--lang en|th`
+
+In packaged builds, run the same options directly from the app binary (Windows/Linux/macOS).
+
 ## Build (Nuitka)
 
 Install dependencies first:

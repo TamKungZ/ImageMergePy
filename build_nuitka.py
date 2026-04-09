@@ -225,8 +225,8 @@ def build_windows(root: Path):
     mode = run_build_with_fallback(
         root,
         out_dir,
-        ["--onefile", "--onefile-no-compression", "--windows-console-mode=disable", *metadata_args],
-        ["--windows-console-mode=disable", *metadata_args],
+        ["--onefile", "--onefile-no-compression", "--windows-console-mode=attach", *metadata_args],
+        ["--windows-console-mode=attach", *metadata_args],
     )
     binary_path = out_dir / (APP_NAME + ".exe")
     if mode == "onefile":
