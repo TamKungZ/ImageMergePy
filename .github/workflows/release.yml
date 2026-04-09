@@ -212,6 +212,7 @@ jobs:
             "arm" { "arm" }
             default { "x64" }
           }
+          $programFilesDirId = if ($archLabel -eq "x86") { "ProgramFilesFolder" } else { "ProgramFiles64Folder" }
 
           New-Item -ItemType Directory -Force -Path installer | Out-Null
           New-Item -ItemType Directory -Force -Path release_assets | Out-Null
@@ -228,7 +229,6 @@ jobs:
             '    <Property Id="ARPCONTACT" Value="TamKungZ_" />',
             '    <Property Id="ARPURLINFOABOUT" Value="https://github.com" />',
             '    <Property Id="ARPHELPLINK" Value="https://github.com" />',
-            '    <Property Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" />',
             ('    <Icon Id="AppIcon.ico" SourceFile="{0}" />' -f $iconPath),
             '    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />',
             '    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />',
@@ -241,7 +241,7 @@ jobs:
             '',
             '  <Fragment>',
             '    <Directory Id="TARGETDIR" Name="SourceDir">',
-            '      <Directory Id="ProgramFilesFolder">',
+            ('      <Directory Id="{0}">' -f $programFilesDirId),
             '        <Directory Id="INSTALLFOLDER" Name="ImageMerge" />',
             '      </Directory>',
             '      <Directory Id="ProgramMenuFolder">',
@@ -256,11 +256,11 @@ jobs:
             '      <Component Id="StartMenuShortcutComponent" Directory="ImageMergeProgramMenuFolder" Guid="*">',
             '        <Shortcut Id="StartMenuShortcut" Name="ImageMerge" Description="ImageMerge" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />',
             '        <RemoveFolder Id="RemoveImageMergeProgramMenuFolder" On="uninstall" />',
-            '        <RegistryValue Root="HKCU" Key="Software\\TamKungZ_\\ImageMerge" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />',
+            '        <RegistryValue Root="HKCU" Key="Software\TamKungZ_\ImageMerge" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />',
             '      </Component>',
             '      <Component Id="DesktopShortcutComponent" Directory="DesktopFolder" Guid="*">',
             '        <Shortcut Id="DesktopShortcut" Name="ImageMerge" Description="ImageMerge" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />',
-            '        <RegistryValue Root="HKCU" Key="Software\\TamKungZ_\\ImageMerge" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />',
+            '        <RegistryValue Root="HKCU" Key="Software\TamKungZ_\ImageMerge" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />',
             '      </Component>',
             '    </ComponentGroup>',
             '  </Fragment>',
