@@ -233,7 +233,7 @@ jobs:
 
           $wixArch = if ($archLabel -eq "x86") { "x86" } else { "x64" }
           candle -dSourceDir="$distDir" installer\ImageMerge.wxs installer\ImageMergeFiles.wxs -arch $wixArch
-          light installer\ImageMerge.wixobj installer\ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
+          light ImageMerge.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
 
       - name: Pack release archives
         shell: bash
