@@ -13,12 +13,13 @@ A GUI tool to merge images/videos from multiple folders, remove duplicates with 
 - Set a per-folder `prefix`
 - Rename files as `prefix-0001.jpg` or `0001.jpg`
 - Keep output ordered: images first, videos last
-- Supports building a `.exe` with PyInstaller
+- New desktop UI built with `PySide6`
+- Native builds with `Nuitka`
 
 ## Requirements
 
 - Python 3.10+ (recommended)
-- Windows (the UI uses `tkinter` and registers Kanit fonts on Windows)
+- OS-specific native builds are supported on Windows, Linux, and macOS
 
 ## Install
 
@@ -32,9 +33,15 @@ pip install -r requirements.txt
 python MainApp.py
 ```
 
-## Build EXE (PyInstaller)
+## Build (Nuitka)
 
-Use build scripts:
+Install dependencies first:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then use the build scripts (or run `python build_nuitka.py` directly):
 
 ```bash
 ./build.sh
@@ -44,17 +51,35 @@ Use build scripts:
 build.bat
 ```
 
-Or run PyInstaller directly:
+`build_nuitka.py` detects the current OS and builds native output:
 
-```bash
-pyinstaller --noconfirm --clean --onefile --windowed --name ImageMerge --add-data "assets;assets" --add-data "locales;locales" MainApp.py
+- **Windows**: PE executable (`ImageMerge.exe`) under `dist/windows/ImageMerge.dist/`
+- **Linux**: ELF binary (`ImageMerge`) under `dist/linux/ImageMerge.dist/`
+- **macOS**:
+  - Mach-O binary under `dist/macos-binary/ImageMerge.dist/`
+  - `.app` bundle under `dist/macos-app/ImageMerge.app`
+
+Note: cross-compiling to another OS is not configured; run the build on each target OS.
+
+Default build mode is `standalone` for reliability.
+
+To force `onefile` mode (experimental on some Windows + Python/Nuitka versions):
+
+```powershell
+$env:IMAGEMERGE_ONEFILE=1
+./build.bat
 ```
 
-The built executable will be in the `dist/` folder.
+If onefile fails during payload step, update packaging deps and retry:
+
+```powershell
+python -m pip install -U "Nuitka[onefile]" zstandard
+```
+
+Also exclude your build folder from Windows Defender/antivirus scan during build.
 
 ## Notes
 
-- Kanit fonts are stored in `assets/Kanit/` with license file `assets/Kanit/OFL.txt`.
-- If Kanit is not available, the app falls back to `Segoe UI`.
-- Language files are in `locales/en.json` and `locales/th.json`.
+- UI translations are embedded in code (no external locale files required at runtime).
+- The app uses platform fonts by default.
 - Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.
