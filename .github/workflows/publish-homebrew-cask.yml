@@ -1,0 +1,133 @@
+name: Publish Homebrew Cask
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v1.0.2)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CASK_NAME: imagemerge
+  CASK_DESC: Open-source image and video merge tool
+  CASK_HOMEPAGE: https://github.com/TamKungZ/ImageMergePy
+
+jobs:
+  homebrew-cask:
+    name: Update Homebrew Cask PR
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    steps:
+      - name: Resolve release tag
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG" ]; then TAG="${{ inputs.tag }}"; fi
+          if [ -z "$TAG" ]; then
+            echo "Missing release tag"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          if [ -z "$VERSION" ]; then
+            echo "Invalid version from tag: $TAG"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve macOS asset URL
+        id: asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          ASSET_URL="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.assets[] | select(.name | test("^ImageMerge-macos-binary-.*\\.zip$")) | .browser_download_url' | head -n 1)"
+          if [ -z "$ASSET_URL" ]; then
+            echo "No macOS binary zip asset found for tag $TAG"
+            exit 1
+          fi
+          curl -L "$ASSET_URL" -o imagemerge-macos.zip
+          SHA256="$(sha256sum imagemerge-macos.zip | cut -d' ' -f1)"
+          echo "url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve tap target
+        id: tap
+        shell: bash
+        run: |
+          TAP_REPO="${{ vars.HOMEBREW_TAP_REPO }}"
+          if [ -z "$TAP_REPO" ]; then
+            TAP_REPO="${{ github.repository_owner }}/homebrew-tap"
+          fi
+          echo "repo=$TAP_REPO" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ steps.tap.outputs.repo }}
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          path: tap
+
+      - name: Update cask file
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          URL="${{ steps.asset.outputs.url }}"
+          SHA256="${{ steps.asset.outputs.sha256 }}"
+
+          mkdir -p tap/Casks
+          cat > "tap/Casks/${{ env.CASK_NAME }}.rb" <<EOF
+cask "${{ env.CASK_NAME }}" do
+  version "${VERSION}"
+  sha256 "${SHA256}"
+
+  url "${URL}"
+  name "ImageMerge"
+  desc "${{ env.CASK_DESC }}"
+  homepage "${{ env.CASK_HOMEPAGE }}"
+
+  binary "ImageMerge/ImageMerge", target: "ImageMerge"
+end
+EOF
+
+      - name: Create pull request in tap repo
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Missing secret: HOMEBREW_TAP_GITHUB_TOKEN"
+            exit 1
+          fi
+
+          VERSION="${{ steps.meta.outputs.version }}"
+          BRANCH="chore/cask-${{ env.CASK_NAME }}-${VERSION}-${{ github.run_id }}"
+
+          git -C tap config user.name "github-actions[bot]"
+          git -C tap config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C tap checkout -b "$BRANCH"
+          git -C tap add "Casks/${{ env.CASK_NAME }}.rb"
+
+          if git -C tap diff --cached --quiet; then
+            echo "No cask changes to commit"
+            exit 0
+          fi
+
+          git -C tap commit -m "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}"
+          git -C tap push -u origin "$BRANCH"
+
+          gh pr create \
+            --repo "${{ steps.tap.outputs.repo }}" \
+            --head "$BRANCH" \
+            --base "main" \
+            --title "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}" \
+            --body "Automated cask update for release ${VERSION}."

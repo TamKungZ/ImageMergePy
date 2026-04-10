@@ -1,0 +1,79 @@
+name: Publish WinGet Manifest
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v1.0.2)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  WINGET_PACKAGE_IDENTIFIER: TamKungZ.ImageMerge
+  WINGET_INSTALLER_NAME: ImageMerge-windows-x64.msi
+
+jobs:
+  winget:
+    name: Submit to WinGet
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    steps:
+      - name: Resolve release tag
+        id: meta
+        shell: powershell
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = "${{ inputs.tag }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($tag)) { throw "Missing release tag" }
+          $version = $tag
+          if ($version.StartsWith('v')) { $version = $version.Substring(1) }
+          if ([string]::IsNullOrWhiteSpace($version)) { throw "Invalid version from tag: $tag" }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Resolve installer URL from release assets
+        id: asset
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.meta.outputs.tag }}"
+          $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" | ConvertFrom-Json
+          $asset = $release.assets | Where-Object { $_.name -eq $env:WINGET_INSTALLER_NAME } | Select-Object -First 1
+          if (-not $asset) {
+            throw "Asset '$env:WINGET_INSTALLER_NAME' not found in release $tag"
+          }
+          "url=$($asset.browser_download_url)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Install wingetcreate
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile "wingetcreate.exe"
+
+      - name: Submit WinGet manifest update
+        shell: powershell
+        env:
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINGET_GITHUB_TOKEN)) {
+            throw "Missing secret: WINGET_GITHUB_TOKEN"
+          }
+
+          $id = $env:WINGET_PACKAGE_IDENTIFIER
+          $version = "${{ steps.meta.outputs.version }}"
+          $url = "${{ steps.asset.outputs.url }}"
+
+          try {
+            .\wingetcreate.exe update $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
+          }
+          catch {
+            .\wingetcreate.exe new $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
+          }
