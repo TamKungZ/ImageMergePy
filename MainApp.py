@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QByteArray, QObject, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -72,6 +72,8 @@ C_DANGER    = "#d54949"
 
 
 def setup_app_fonts() -> str:
+    loaded_family = None
+
     for encoded_data in EMBEDDED_FONTS.values():
         try:
             font_bytes = base64.b64decode(encoded_data)
@@ -79,16 +81,26 @@ def setup_app_fonts() -> str:
             if font_id == -1:
                 continue
             families = QFontDatabase.applicationFontFamilies(font_id)
-            if families:
-                return families[0]
+            if families and loaded_family is None:
+                loaded_family = families[0]
         except Exception:
             continue
+
+    if loaded_family:
+        return loaded_family
 
     if os.name == "nt":
         return "Leelawadee UI"
     if sys.platform == "darwin":
-        return "SF Pro Display"
-    return "Noto Sans"
+        for font in ("Helvetica Neue", "Helvetica", "Arial"):
+            if QFontDatabase().hasFamily(font):
+                return font
+        return "Arial"
+
+    for font in ("Noto Sans", "DejaVu Sans", "Liberation Sans", "FreeSans"):
+        if QFontDatabase().hasFamily(font):
+            return font
+    return "Sans Serif"
 
 
 def normalize_prefix(prefix: str) -> str:
@@ -553,15 +565,10 @@ class ModeCard(QWidget):
     def _refresh_style(self):
         if self._selected:
             self.setStyleSheet(
-                f"ModeCard {{ background:{C_ACCENT_DIM}; border:1px solid {C_ACCENT};"
-                f" border-radius:10px; }}"
+                f"background:{C_ACCENT_DIM}; border:2px solid {C_ACCENT}; border-radius:10px;"
             )
         else:
-            self.setStyleSheet(
-                f"ModeCard {{ background:{C_SURFACE}; border:1px solid {C_BORDER2};"
-                f" border-radius:10px; }}"
-                f"ModeCard:hover {{ background:{C_SURFACE2}; }}"
-            )
+            self.setStyleSheet(f"background:{C_SURFACE}; border:1px solid {C_BORDER2}; border-radius:10px;")
 
     def mousePressEvent(self, _event):
         self.clicked.emit(self.mode_key)
@@ -632,10 +639,7 @@ class SourceRow(QWidget):
         if self._selected:
             self.setStyleSheet(f"background:{C_ACCENT_DIM};")
         else:
-            self.setStyleSheet(
-                f"SourceRow {{ background:transparent; }}"
-                f"SourceRow:hover {{ background:{C_SURFACE2}; }}"
-            )
+            self.setStyleSheet("background:transparent;")
 
     def mouseDoubleClickEvent(self, _event):
         self.edit_requested.emit(self.path_str)
@@ -675,6 +679,10 @@ class App(QMainWindow):
         super().__init__()
         self.i18n = I18n(detect_language())
         self.t = self.i18n.t
+
+        icon_path = Path(__file__).resolve().parent / "assets" / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
         self.resize(1160, 780)
@@ -788,11 +796,12 @@ class App(QMainWindow):
 
         /* Secondary buttons */
         QPushButton#primaryBtn {{
-            background: {C_ACCENT}; color: #ffffff; border: none;
+            background-color: {C_ACCENT}; color: #0f1728; border: none;
             border-radius: 7px; padding: 8px 14px; font-size: 14px; font-weight: 600;
         }}
-        QPushButton#primaryBtn:hover {{ background: #2b62cc; }}
-        QPushButton#primaryBtn:disabled {{ background: {C_SURFACE3}; color: {C_TEXT3}; }}
+        QPushButton#primaryBtn:hover {{ background-color: #2458bd; }}
+        QPushButton#primaryBtn:pressed {{ background-color: #1f4da6; }}
+        QPushButton#primaryBtn:disabled {{ background-color: #d8e3fb; color: #6f7f99; border-color: {C_BORDER2}; }}
 
         QPushButton#ghostBtn {{
             background: {C_SURFACE2}; color: {C_TEXT}; border: 1px solid {C_BORDER2};
@@ -851,30 +860,10 @@ class App(QMainWindow):
         tb_lay.setContentsMargins(20, 0, 20, 0)
         tb_lay.setSpacing(10)
 
-        logo_badge = QWidget()
-        logo_badge.setFixedSize(30, 30)
-        logo_badge.setStyleSheet(
-            f"background:{C_ACCENT}; border-radius:7px;"
-        )
-        badge_lay = QVBoxLayout(logo_badge)
-        badge_lay.setContentsMargins(0, 0, 0, 0)
-        logo_lbl = QLabel("IM")
-        logo_lbl.setAlignment(Qt.AlignCenter)
-        logo_lbl.setStyleSheet("color:#fff; font-size:13px; font-weight:800; letter-spacing:-0.4px;")
-        badge_lay.addWidget(logo_lbl)
+        self.app_name_label = QLabel()
+        self.app_name_label.setStyleSheet(f"color:{C_TEXT}; font-size:22px; font-weight:700;")
 
-        app_name = QLabel("ImageMerge")
-        app_name.setStyleSheet(f"color:{C_TEXT}; font-size:22px; font-weight:700;")
-
-        version_pill = QLabel("v2")
-        version_pill.setStyleSheet(
-            f"color:{C_ACCENT}; background:{C_ACCENT_DIM}; border:1px solid rgba(47,111,237,0.35);"
-            f" border-radius:4px; padding:2px 6px; font-size:11px; font-weight:700; letter-spacing:0.4px;"
-        )
-
-        tb_lay.addWidget(logo_badge)
-        tb_lay.addWidget(app_name)
-        tb_lay.addWidget(version_pill)
+        tb_lay.addWidget(self.app_name_label)
         tb_lay.addStretch()
 
         self.desc_label = QLabel()
@@ -921,6 +910,7 @@ class App(QMainWindow):
         self.add_folder_btn = QPushButton()
         self.add_folder_btn.setObjectName("primaryBtn")
         self.add_folder_btn.setCursor(Qt.PointingHandCursor)
+        self.add_folder_btn.setEnabled(True)
         self.add_folder_btn.clicked.connect(self.add_input_folder)
 
         self.edit_prefix_btn = QPushButton()
@@ -1078,15 +1068,15 @@ class App(QMainWindow):
 
         grid1 = QHBoxLayout()
         grid1.setSpacing(8)
-        self.stat_added   = StatCard("Added",   C_SUCCESS)
-        self.stat_skipped = StatCard("Skipped", C_WARNING)
+        self.stat_added   = StatCard(self.t("stat_added"),   C_SUCCESS)
+        self.stat_skipped = StatCard(self.t("stat_skipped"), C_WARNING)
         grid1.addWidget(self.stat_added)
         grid1.addWidget(self.stat_skipped)
 
         grid2 = QHBoxLayout()
         grid2.setSpacing(8)
-        self.stat_total  = StatCard("Total out", C_TEXT)
-        self.stat_failed = StatCard("Failed",    C_DANGER)
+        self.stat_total  = StatCard(self.t("stat_total_out"), C_TEXT)
+        self.stat_failed = StatCard(self.t("stat_failed"),    C_DANGER)
         grid2.addWidget(self.stat_total)
         grid2.addWidget(self.stat_failed)
 
@@ -1129,6 +1119,7 @@ class App(QMainWindow):
 
     def _retranslate_ui(self):
         self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
+        self.app_name_label.setText(self.t("app_title") or APP_FALLBACK_TITLE)
 
         self.desc_label.setText(self.t("app_desc")[:88])
         self.lang_label.setText(self.t("label_language"))
@@ -1138,7 +1129,7 @@ class App(QMainWindow):
         self.source_section_label.setText(self.t("section_input").upper())
         self.output_section_label.setText(self.t("section_output").upper())
         self.mode_section_label.setText(self.t("section_mode").upper())
-        self.opt_section_label.setText("Options".upper())
+        self.opt_section_label.setText(self.t("section_options").upper())
         self.log_section_label.setText(self.t("section_log").upper())
 
         self.add_folder_btn.setText("+ " + self.t("btn_add_folder"))
@@ -1147,7 +1138,7 @@ class App(QMainWindow):
         self.clear_btn.setText(self.t("btn_clear_all"))
         self.output_btn.setText(self.t("btn_select_output"))
         self.start_btn.setText(self.t("btn_start"))
-        self._clear_log_btn.setText("Clear")
+        self._clear_log_btn.setText(self.t("btn_clear_log"))
 
         self.col_folder_lbl.setText(self.t("col_folder"))
         self.col_prefix_lbl.setText(self.t("col_prefix"))
@@ -1160,9 +1151,9 @@ class App(QMainWindow):
             MODE_MOVE: self.t("mode_move"),
         }
         short_desc = {
-            MODE_COPY_KEEP:   "Keep originals safe",
-            MODE_COPY_DELETE: "Copy then remove sources",
-            MODE_MOVE:        "No copy kept",
+            MODE_COPY_KEEP:   self.t("mode_desc_copy_keep"),
+            MODE_COPY_DELETE: self.t("mode_desc_copy_delete"),
+            MODE_MOVE:        self.t("mode_desc_move"),
         }
         for key, full in mode_data.items():
             card = self.mode_cards[key]
@@ -1172,18 +1163,16 @@ class App(QMainWindow):
         self.clear_output_checkbox.setText(self.t("opt_clear_output"))
         self.mode_note_label.setText(self.t("mode_note"))
 
-        self.stat_added.set_label("Added")
-        self.stat_skipped.set_label("Skipped")
-        self.stat_total.set_label("Total out")
-        self.stat_failed.set_label("Failed")
+        self.stat_added.set_label(self.t("stat_added"))
+        self.stat_skipped.set_label(self.t("stat_skipped"))
+        self.stat_total.set_label(self.t("stat_total_out"))
+        self.stat_failed.set_label(self.t("stat_failed"))
 
         self._refresh_empty_label()
 
     def _refresh_empty_label(self):
         if not self.input_entries:
-            self.empty_label.setText("No source folders added yet"
-                                     if self.i18n.lang == "en"
-                                     else "ยังไม่ได้เพิ่มโฟลเดอร์ต้นทาง")
+            self.empty_label.setText(self.t("empty_no_source"))
             self.empty_label.show()
         else:
             self.empty_label.hide()
@@ -1331,7 +1320,7 @@ class App(QMainWindow):
         self.stat_failed.set_value("—")
 
         self.start_btn.setEnabled(False)
-        self.start_btn.setText("Processing..." if self.i18n.lang == "en" else "กำลังประมวลผล...")
+        self.start_btn.setText(self.t("status_processing"))
         self.is_running = True
 
         output_dir = Path(output_dir_text)
@@ -1358,11 +1347,16 @@ class App(QMainWindow):
 
     def _parse_log_for_stats(self, text: str):
         import re as _re
+        def _pattern_from_i18n(key: str) -> str:
+            template = self.t(key, count="{count}")
+            escaped = _re.escape(template)
+            return escaped.replace(_re.escape("{count}"), r"(\d+)")
+
         pairs = [
-            (self.stat_added,   r"(?:Added|เพิ่มใหม่):\s*(\d+)"),
-            (self.stat_skipped, r"(?:Skipped duplicates|ซ้ำข้ามไป):\s*(\d+)"),
-            (self.stat_total,   r"(?:Total output files|รวม output ตอนนี้):\s*(\d+)"),
-            (self.stat_failed,  r"(?:Failed|ผิดพลาด):\s*(\d+)"),
+            (self.stat_added, _pattern_from_i18n("log_added")),
+            (self.stat_skipped, _pattern_from_i18n("log_skipped")),
+            (self.stat_total, _pattern_from_i18n("log_total_output")),
+            (self.stat_failed, _pattern_from_i18n("log_failed")),
         ]
         for card, pattern in pairs:
             m = _re.search(pattern, text)
