@@ -1,3 +1,36 @@
+Tag: v1.0.3
+Release title: v1.0.3 - Multi-Channel Packaging + Store Automation
+Release notes:
+## ImageMerge v1.0.3
+
+Release focused on distribution expansion, installer coverage, and store automation readiness.
+
+### Highlights
+- Added Linux Flatpak packaging pipeline and release artifact output (`.flatpak`)
+- Added Linux Snap packaging pipeline and release artifact output (`.snap`)
+- Added Linux installer coverage in one release flow: `.deb`, `.rpm`, `.AppImage`, `.flatpak`, `.snap`
+- Added Flathub-specific manifest (separate from CI Flatpak manifest) under `packaging/flathub/`
+- Added pinned Python dependency module for Flathub (`PySide6` stack with architecture-specific wheel URLs + SHA256)
+- Added WinGet automation workflow to submit/update manifests from published releases
+- Added Homebrew Cask automation workflow to update cask and open PR to tap repo
+- Added project privacy policy document for store listings (`PRIVACY_POLICY.md`, EN + TH)
+
+### Packaging / Distribution Notes
+- Release workflow now builds additional Linux artifacts and uploads them to GitHub Release automatically
+- Flatpak App ID standardized as `me.tamkungz.ImageMerge`
+- Snap packaging introduced with strict confinement baseline and desktop integration metadata
+- Homebrew workflow targets macOS release zip assets and computes SHA256 during automation
+- WinGet workflow targets Windows MSI release assets for manifest submission
+
+### Store Readiness Notes
+- Microsoft Store and Mac App Store preparation is now supported by accompanying policy/doc updates
+- Flathub submission assets are prepared; final Flathub PR still requires Linux-side validation (`flatpak-builder`) and review flow
+
+### License
+This project remains open-source under the **MIT License**.
+
+---
+
 Tag: v1.0.2
 Release title: v1.0.2 - UI Refresh + Localization Expansion
 Release notes:
