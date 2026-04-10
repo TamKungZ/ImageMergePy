@@ -1,3 +1,28 @@
+Tag: v1.0.2
+Release title: v1.0.2 - UI Refresh + Localization Expansion
+Release notes:
+## ImageMerge v1.0.2
+
+Update focused on UI usability, localization scale-up, and packaging polish.
+
+### Highlights
+- Refreshed GUI layout and light theme for better readability
+- Improved button/state contrast (including Start during processing)
+- Removed hardcoded UI text and fully wired new labels/status strings to locale keys
+- Expanded runtime language support from locale files (`ar`, `de`, `en`, `es`, `fr`, `id`, `ja`, `ko`, `ru`, `th`, `vi`, `zh`)
+- Improved font selection by language/script with Thai embedded-font priority
+- Fixed completion dialog handling to avoid UI freeze after processing finishes
+- Updated release ZIP packaging to use a clean top-level `ImageMerge/` folder instead of raw build folder names
+- Input folder add flow now keeps default prefix empty unless user edits it
+
+### Packaging Notes
+- Release archives now extract into a user-friendly `ImageMerge` directory on all platforms
+
+### License
+This project remains open-source under the **MIT License**.
+
+---
+
 Tag: v1.0.1
 Release title: v1.0.1 - CLI Mode + Packaging Updates
 Release notes:
