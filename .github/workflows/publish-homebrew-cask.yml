@@ -85,19 +85,17 @@ jobs:
           SHA256="${{ steps.asset.outputs.sha256 }}"
 
           mkdir -p tap/Casks
-          cat > "tap/Casks/${{ env.CASK_NAME }}.rb" <<EOF
-cask "${{ env.CASK_NAME }}" do
-  version "${VERSION}"
-  sha256 "${SHA256}"
-
-  url "${URL}"
-  name "ImageMerge"
-  desc "${{ env.CASK_DESC }}"
-  homepage "${{ env.CASK_HOMEPAGE }}"
-
-  binary "ImageMerge/ImageMerge", target: "ImageMerge"
-end
-EOF
+          {
+            printf 'cask "%s" do\n' "${{ env.CASK_NAME }}"
+            printf '  version "%s"\n' "$VERSION"
+            printf '  sha256 "%s"\n\n' "$SHA256"
+            printf '  url "%s"\n' "$URL"
+            printf '  name "ImageMerge"\n'
+            printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
+            printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
+            printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
+            printf 'end\n'
+          } > "tap/Casks/${{ env.CASK_NAME }}.rb"
 
       - name: Create pull request in tap repo
         shell: bash
