@@ -50,15 +50,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.meta.outputs.tag }}"
-          ASSET_URL="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.assets[] | select(.name | test("^ImageMerge-macos-binary-.*\\.zip$")) | .browser_download_url' | head -n 1)"
-          if [ -z "$ASSET_URL" ]; then
-            echo "No macOS binary zip asset found for tag $TAG"
+          ARM_URL="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.assets[] | select(.name == "ImageMerge-macos-binary-arm64.zip") | .browser_download_url')"
+          X64_URL="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.assets[] | select(.name == "ImageMerge-macos-binary-x64.zip") | .browser_download_url')"
+
+          if [ -z "$ARM_URL" ] && [ -z "$X64_URL" ]; then
+            echo "No macOS binary zip assets found for tag $TAG"
             exit 1
           fi
-          curl -L "$ASSET_URL" -o imagemerge-macos.zip
-          SHA256="$(sha256sum imagemerge-macos.zip | cut -d' ' -f1)"
-          echo "url=$ASSET_URL" >> "$GITHUB_OUTPUT"
-          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+          ARM_SHA256=""
+          X64_SHA256=""
+
+          if [ -n "$ARM_URL" ]; then
+            curl -L "$ARM_URL" -o imagemerge-macos-arm64.zip
+            ARM_SHA256="$(sha256sum imagemerge-macos-arm64.zip | cut -d' ' -f1)"
+          fi
+
+          if [ -n "$X64_URL" ]; then
+            curl -L "$X64_URL" -o imagemerge-macos-x64.zip
+            X64_SHA256="$(sha256sum imagemerge-macos-x64.zip | cut -d' ' -f1)"
+          fi
+
+          echo "arm_url=$ARM_URL" >> "$GITHUB_OUTPUT"
+          echo "arm_sha256=$ARM_SHA256" >> "$GITHUB_OUTPUT"
+          echo "x64_url=$X64_URL" >> "$GITHUB_OUTPUT"
+          echo "x64_sha256=$X64_SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Resolve tap target
         id: tap
@@ -68,7 +84,16 @@ jobs:
           if [ -z "$TAP_REPO" ]; then
             TAP_REPO="${{ github.repository_owner }}/homebrew-tap"
           fi
+          TAP_OWNER="${TAP_REPO%%/*}"
+
+          BASE_REPO="${{ vars.HOMEBREW_TAP_BASE_REPO }}"
+          if [ -z "$BASE_REPO" ]; then
+            BASE_REPO="$TAP_REPO"
+          fi
+
           echo "repo=$TAP_REPO" >> "$GITHUB_OUTPUT"
+          echo "owner=$TAP_OWNER" >> "$GITHUB_OUTPUT"
+          echo "base_repo=$BASE_REPO" >> "$GITHUB_OUTPUT"
 
       - name: Validate tap repository exists
         shell: bash
@@ -82,14 +107,26 @@ jobs:
             exit 1
           fi
 
+      - name: Validate base repository exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          BASE_REPO="${{ steps.tap.outputs.base_repo }}"
+          if ! gh api "repos/${BASE_REPO}" >/dev/null 2>&1; then
+            echo "Base repository not found: ${BASE_REPO}"
+            echo "Set Actions variable HOMEBREW_TAP_BASE_REPO to an existing OWNER/REPO."
+            exit 1
+          fi
+
       - name: Resolve tap default branch
         id: tapmeta
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
         run: |
-          TAP_REPO="${{ steps.tap.outputs.repo }}"
-          DEFAULT_BRANCH="$(gh api "repos/${TAP_REPO}" --jq '.default_branch')"
+          BASE_REPO="${{ steps.tap.outputs.base_repo }}"
+          DEFAULT_BRANCH="$(gh api "repos/${BASE_REPO}" --jq '.default_branch')"
           if [ -z "$DEFAULT_BRANCH" ] || [ "$DEFAULT_BRANCH" = "null" ]; then
             echo "Tap repository has no default branch. Create an initial commit first."
             exit 1
@@ -108,21 +145,55 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
-          URL="${{ steps.asset.outputs.url }}"
-          SHA256="${{ steps.asset.outputs.sha256 }}"
+          ARM_URL="${{ steps.asset.outputs.arm_url }}"
+          ARM_SHA256="${{ steps.asset.outputs.arm_sha256 }}"
+          X64_URL="${{ steps.asset.outputs.x64_url }}"
+          X64_SHA256="${{ steps.asset.outputs.x64_sha256 }}"
 
           mkdir -p tap/Casks
-          {
-            printf 'cask "%s" do\n' "${{ env.CASK_NAME }}"
-            printf '  version "%s"\n' "$VERSION"
-            printf '  sha256 "%s"\n\n' "$SHA256"
-            printf '  url "%s"\n' "$URL"
-            printf '  name "ImageMerge"\n'
-            printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
-            printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
-            printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
-            printf 'end\n'
-          } > "tap/Casks/${{ env.CASK_NAME }}.rb"
+          if [ -n "$ARM_URL" ] && [ -n "$X64_URL" ]; then
+            {
+              printf 'cask "%s" do\n' "${{ env.CASK_NAME }}"
+              printf '  version "%s"\n\n' "$VERSION"
+              printf '  on_arm do\n'
+              printf '    url "%s"\n' "$ARM_URL"
+              printf '    sha256 "%s"\n' "$ARM_SHA256"
+              printf '  end\n\n'
+              printf '  on_intel do\n'
+              printf '    url "%s"\n' "$X64_URL"
+              printf '    sha256 "%s"\n' "$X64_SHA256"
+              printf '  end\n\n'
+              printf '  name "ImageMerge"\n'
+              printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
+              printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
+              printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
+              printf 'end\n'
+            } > "tap/Casks/${{ env.CASK_NAME }}.rb"
+          elif [ -n "$ARM_URL" ]; then
+            {
+              printf 'cask "%s" do\n' "${{ env.CASK_NAME }}"
+              printf '  version "%s"\n' "$VERSION"
+              printf '  sha256 "%s"\n\n' "$ARM_SHA256"
+              printf '  url "%s"\n' "$ARM_URL"
+              printf '  name "ImageMerge"\n'
+              printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
+              printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
+              printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
+              printf 'end\n'
+            } > "tap/Casks/${{ env.CASK_NAME }}.rb"
+          else
+            {
+              printf 'cask "%s" do\n' "${{ env.CASK_NAME }}"
+              printf '  version "%s"\n' "$VERSION"
+              printf '  sha256 "%s"\n\n' "$X64_SHA256"
+              printf '  url "%s"\n' "$X64_URL"
+              printf '  name "ImageMerge"\n'
+              printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
+              printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
+              printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
+              printf 'end\n'
+            } > "tap/Casks/${{ env.CASK_NAME }}.rb"
+          fi
 
       - name: Create pull request in tap repo
         shell: bash
@@ -151,8 +222,8 @@ jobs:
           git -C tap push -u origin "$BRANCH"
 
           gh pr create \
-            --repo "${{ steps.tap.outputs.repo }}" \
-            --head "$BRANCH" \
+            --repo "${{ steps.tap.outputs.base_repo }}" \
+            --head "${{ steps.tap.outputs.owner }}:$BRANCH" \
             --base "${{ steps.tapmeta.outputs.default_branch }}" \
             --title "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}" \
             --body "Automated cask update for release ${VERSION}."
