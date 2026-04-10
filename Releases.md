@@ -14,6 +14,11 @@ Release focused on distribution expansion, installer coverage, and store automat
 - Added WinGet automation workflow to submit/update manifests from published releases
 - Added Homebrew Cask automation workflow to update cask and open PR to tap repo
 - Added project privacy policy document for store listings (`PRIVACY_POLICY.md`, EN + TH)
+- Updated macOS release matrix to build both Intel and Apple Silicon artifacts (`macos-13` + `macos-latest`)
+- Improved Homebrew automation to support dual-architecture cask output (`on_intel` / `on_arm`) and optional upstream base repo PR flow
+- Refined WinGet automation behavior for first-submission vs update flow handling
+- Redesigned About dialog to a cleaner scrollable layout for better readability
+- Fixed About version display in packaged builds by including `app_metadata.json` in Nuitka build outputs
 
 ### Packaging / Distribution Notes
 - Release workflow now builds additional Linux artifacts and uploads them to GitHub Release automatically
@@ -21,6 +26,7 @@ Release focused on distribution expansion, installer coverage, and store automat
 - Snap packaging introduced with strict confinement baseline and desktop integration metadata
 - Homebrew workflow targets macOS release zip assets and computes SHA256 during automation
 - WinGet workflow targets Windows MSI release assets for manifest submission
+- About metadata now stays consistent across source and packaged builds
 
 ### Store Readiness Notes
 - Microsoft Store and Mac App Store preparation is now supported by accompanying policy/doc updates

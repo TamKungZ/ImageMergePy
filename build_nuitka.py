@@ -185,8 +185,8 @@ def sign_windows_binary(binary_path: Path):
     run_cmd(verify_cmd, binary_path.parent)
 
 
-def nuitka_base_cmd(output_dir: Path) -> list[str]:
-    return [
+def nuitka_base_cmd(root: Path, output_dir: Path) -> list[str]:
+    cmd = [
         sys.executable,
         "-m",
         "nuitka",
@@ -198,6 +198,12 @@ def nuitka_base_cmd(output_dir: Path) -> list[str]:
         f"--output-filename={APP_NAME}",
     ]
 
+    metadata_path = root / METADATA_FILE
+    if metadata_path.exists():
+        cmd.append(f"--include-data-file={metadata_path}=app_metadata.json")
+
+    return cmd
+
 
 def try_onefile() -> bool:
     return os.environ.get("IMAGEMERGE_ONEFILE", "").strip().lower() in {"1", "true", "yes", "on"}
@@ -205,14 +211,14 @@ def try_onefile() -> bool:
 
 def run_build_with_fallback(root: Path, out_dir: Path, onefile_args: list[str], standalone_args: list[str]):
     if try_onefile():
-        onefile_cmd = nuitka_base_cmd(out_dir) + onefile_args + [ENTRY_FILE]
+        onefile_cmd = nuitka_base_cmd(root, out_dir) + onefile_args + [ENTRY_FILE]
         try:
             run_cmd(onefile_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
             return "onefile"
         except subprocess.CalledProcessError:
             print("Onefile build failed on this environment, falling back to standalone build.")
 
-    standalone_cmd = nuitka_base_cmd(out_dir) + standalone_args + [ENTRY_FILE]
+    standalone_cmd = nuitka_base_cmd(root, out_dir) + standalone_args + [ENTRY_FILE]
     run_cmd(standalone_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
     return "standalone"
 
@@ -253,7 +259,7 @@ def build_macos(root: Path):
     mode = run_build_with_fallback(root, out_bin_dir, ["--onefile", "--onefile-no-compression"], [])
 
     out_app_dir = root / "dist" / "macos-app"
-    app_cmd = nuitka_base_cmd(out_app_dir) + ["--macos-create-app-bundle", ENTRY_FILE]
+    app_cmd = nuitka_base_cmd(root, out_app_dir) + ["--macos-create-app-bundle", ENTRY_FILE]
     run_cmd(app_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_app_dir))
 
     if mode == "onefile":

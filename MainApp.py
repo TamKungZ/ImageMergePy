@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -37,6 +38,31 @@ from embedded_fonts import EMBEDDED_FONTS
 from embedded_locales import EMBEDDED_LOCALES as FILE_EMBEDDED_LOCALES
 
 APP_FALLBACK_TITLE = "ImageMerge"
+APP_DIR = Path(__file__).resolve().parent
+APP_METADATA_PATH = APP_DIR / "app_metadata.json"
+
+
+def load_app_metadata() -> dict[str, str]:
+    defaults = {
+        "app_name": APP_FALLBACK_TITLE,
+        "company_name": "TamKungZ_",
+        "file_description": "Open-source image and video merge tool",
+        "file_version": "",
+        "product_version": "",
+        "copyright": "",
+    }
+    if APP_METADATA_PATH.exists():
+        try:
+            parsed = json.loads(APP_METADATA_PATH.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                for key, value in parsed.items():
+                    defaults[str(key)] = str(value)
+        except Exception:
+            pass
+    return defaults
+
+
+APP_METADATA = load_app_metadata()
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tiff"}
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv", ".ts", ".mts"}
@@ -47,7 +73,7 @@ MODE_COPY_DELETE = "copy_delete"
 MODE_COPY_KEEP = "copy_keep"
 
 DEFAULT_LANG = "en"
-LOCALES_DIR = Path(__file__).resolve().parent / "locales"
+LOCALES_DIR = APP_DIR / "locales"
 
 
 def discover_supported_langs() -> set[str]:
@@ -843,6 +869,21 @@ class App(QMainWindow):
             selection-background-color: {C_ACCENT_DIM};
         }}
 
+        QPushButton#infoBtn {{
+            background: {C_SURFACE2};
+            color: {C_TEXT2};
+            border: 1px solid {C_BORDER2};
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            min-width: 28px;
+            min-height: 28px;
+            max-width: 28px;
+            max-height: 28px;
+        }}
+        QPushButton#infoBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; border-color: {C_ACCENT}; }}
+        QPushButton#infoBtn:pressed {{ background: {C_ACCENT_DIM}; }}
+
         /* Log area */
         QTextEdit#logText {{
             background: {C_SURFACE}; border: none; border-radius: 0;
@@ -1106,6 +1147,18 @@ class App(QMainWindow):
         left_lay.addWidget(self.mode_note_label)
 
         left_lay.addStretch()
+
+        footer_lay = QHBoxLayout()
+        footer_lay.setContentsMargins(0, 0, 0, 0)
+        footer_lay.setSpacing(8)
+        self.info_btn = QPushButton("i")
+        self.info_btn.setObjectName("infoBtn")
+        self.info_btn.setCursor(Qt.PointingHandCursor)
+        self.info_btn.clicked.connect(self.show_about_popup)
+        footer_lay.addWidget(self.info_btn, 0, Qt.AlignLeft | Qt.AlignBottom)
+        footer_lay.addStretch()
+        left_lay.addLayout(footer_lay)
+
         left_scroll.setWidget(left_widget)
         splitter.addWidget(left_scroll)
 
@@ -1199,10 +1252,8 @@ class App(QMainWindow):
         current_code = self.lang_selector.currentData()
         self.lang_selector.blockSignals(True)
         for i, code in enumerate(self._lang_codes):
-            translated = self.t(f"lang_{code}")
-            if translated == f"lang_{code}":
-                translated = LANGUAGE_NATIVE_NAMES.get(code, code.upper())
-            self.lang_selector.setItemText(i, translated)
+            language_name = LANGUAGE_NATIVE_NAMES.get(code, code.upper())
+            self.lang_selector.setItemText(i, language_name)
         selected_index = self.lang_selector.findData(self.i18n.lang)
         if selected_index >= 0:
             self.lang_selector.setCurrentIndex(selected_index)
@@ -1246,6 +1297,7 @@ class App(QMainWindow):
 
         self.clear_output_checkbox.setText(self.t("opt_clear_output"))
         self.mode_note_label.setText(self.t("mode_note"))
+        self.info_btn.setToolTip("About this app")
 
         self.stat_added.set_label(self.t("stat_added"))
         self.stat_skipped.set_label(self.t("stat_skipped"))
@@ -1280,6 +1332,87 @@ class App(QMainWindow):
         self._apply_dark_palette()
         self.setStyleSheet(self._global_stylesheet())
         self._retranslate_ui()
+
+    def _build_about_text(self) -> str:
+        app_name = APP_METADATA.get("app_name") or APP_FALLBACK_TITLE
+        app_desc = self.t("app_desc")
+        version = APP_METADATA.get("product_version") or APP_METADATA.get("file_version") or "-"
+        company = APP_METADATA.get("company_name") or "-"
+        license_note = APP_METADATA.get("copyright") or "MIT License"
+        images = ", ".join(sorted(IMAGE_EXTS))
+        videos = ", ".join(sorted(VIDEO_EXTS))
+        modes = " | ".join(
+            [
+                self.t("mode_copy_keep"),
+                self.t("mode_copy_delete"),
+                self.t("mode_move"),
+            ]
+        )
+        langs = ", ".join(LANGUAGE_NATIVE_NAMES.get(code, code.upper()) for code in self._lang_codes)
+
+        return """\
+<div style="line-height:1.45;">
+  <h2 style="margin:0 0 6px 0;">{app_name}</h2>
+  <p style="margin:0 0 12px 0; color:#4a5a76;">{app_desc}</p>
+
+  <table style="margin:0 0 12px 0;" cellpadding="2" cellspacing="0">
+    <tr><td><b>Version:</b></td><td>{version}</td></tr>
+    <tr><td><b>Developer:</b></td><td>{company}</td></tr>
+    <tr><td><b>License:</b></td><td>{license_note}</td></tr>
+  </table>
+
+  <b>Main features</b>
+  <ul style="margin:6px 0 12px 18px; padding:0;">
+    <li>Merge media from multiple folders</li>
+    <li>De-duplicate by SHA-256 hash + extension</li>
+    <li>Keep images first and videos last</li>
+    <li>Rename output files as sequence numbers with optional per-folder prefix</li>
+  </ul>
+
+  <p style="margin:0 0 6px 0;"><b>Operation modes:</b> {modes}</p>
+  <p style="margin:0 0 6px 0;"><b>Supported image formats:</b> {images}</p>
+  <p style="margin:0 0 6px 0;"><b>Supported video formats:</b> {videos}</p>
+  <p style="margin:0;"><b>UI languages:</b> {langs}</p>
+</div>
+""".format(
+            app_name=app_name,
+            app_desc=app_desc,
+            version=version,
+            company=company,
+            license_note=license_note,
+            modes=modes,
+            images=images,
+            videos=videos,
+            langs=langs,
+        )
+
+    def show_about_popup(self):
+        dialog = QDialog(self)
+        dialog.setModal(True)
+        dialog.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
+        dialog.resize(700, 520)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
+
+        about_text = QTextEdit(dialog)
+        about_text.setReadOnly(True)
+        about_text.setFrameShape(QFrame.NoFrame)
+        about_text.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        about_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        about_text.setHtml(self._build_about_text())
+        layout.addWidget(about_text, 1)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        ok_button = QPushButton("OK", dialog)
+        ok_button.setFixedWidth(104)
+        ok_button.clicked.connect(dialog.accept)
+        buttons.addWidget(ok_button)
+        layout.addLayout(buttons)
+
+        dialog.exec()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
