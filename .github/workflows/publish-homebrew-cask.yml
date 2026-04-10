@@ -70,11 +70,22 @@ jobs:
           fi
           echo "repo=$TAP_REPO" >> "$GITHUB_OUTPUT"
 
+      - name: Validate tap repository exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAP_REPO="${{ steps.tap.outputs.repo }}"
+          if ! gh api "repos/${TAP_REPO}" >/dev/null 2>&1; then
+            echo "Tap repository not found: ${TAP_REPO}"
+            echo "Set Actions variable HOMEBREW_TAP_REPO to an existing OWNER/REPO."
+            exit 1
+          fi
+
       - name: Checkout tap repository
         uses: actions/checkout@v5
         with:
           repository: ${{ steps.tap.outputs.repo }}
-          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           path: tap
 
       - name: Update cask file
