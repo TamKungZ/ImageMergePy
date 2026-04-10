@@ -141,3 +141,28 @@ For better SmartScreen reputation in production:
 - Source translation files are in `locales/en.json` and `locales/th.json`; embedded module is generated to `embedded_locales.py`.
 - Kanit fonts are embedded in code and loaded at runtime (no external font files required at runtime).
 - Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-start.png" alt="ImageMerge Start" width="100%" />
+    </td>
+    <td width="50%">
+      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-mode.png" alt="ImageMerge Mode" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-options.png" alt="ImageMerge Options" width="100%" />
+    </td>
+    <td width="50%">
+      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-add.png" alt="ImageMerge Add" width="100%" />
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-icon.png" alt="ImageMerge Icon" width="20%" />
+</p>
