@@ -41,6 +41,10 @@ Use CLI mode without opening GUI:
 python MainApp.py --cli --input "/path/to/folderA::full" --input "/path/to/folderB::short" --output "/path/to/output" --mode copy_keep
 ```
 
+```bash
+ImageMerge --cli --input "/path/a::full" --input "/path/b::short" --output "/path/out" --mode copy_keep
+```
+
 CLI options:
 
 - `--input PATH[::PREFIX]` (repeatable)
