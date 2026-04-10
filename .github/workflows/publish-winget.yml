@@ -63,7 +63,7 @@ jobs:
         env:
           WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
         run: |
-          $ErrorActionPreference = 'Continue'
+          $ErrorActionPreference = 'Stop'
 
           if ([string]::IsNullOrWhiteSpace($env:WINGET_GITHUB_TOKEN)) {
             throw "Missing secret: WINGET_GITHUB_TOKEN"
@@ -75,9 +75,11 @@ jobs:
 
           .\wingetcreate.exe update $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "wingetcreate update failed, attempting initial submission with 'new'"
-            .\wingetcreate.exe new $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
-            if ($LASTEXITCODE -ne 0) {
-              throw "wingetcreate failed (update/new). Last exit code: $LASTEXITCODE"
-            }
+            throw @"
+wingetcreate update failed.
+
+If this is the first submission for '$id', create the initial manifest manually
+once (wingetcreate new <installerUrl>) and submit PR to microsoft/winget-pkgs.
+After the first PR is merged, this workflow will work automatically via update.
+"@
           }
