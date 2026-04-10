@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ImageMerge
+Comment=Open-source image and video merge tool
+Exec=imagemerge
+Icon=${SNAP}/meta/gui/icon.svg
+Terminal=false
+Categories=Utility;Graphics;

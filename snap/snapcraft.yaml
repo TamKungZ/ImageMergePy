@@ -1,0 +1,39 @@
+name: imagemerge
+base: core22
+version: git
+summary: Open-source image and video merge tool
+description: |
+  ImageMerge merges images and videos from multiple folders into one output,
+  supports duplicate removal with SHA-256, and optional file renaming.
+grade: stable
+confinement: strict
+
+architectures:
+  - build-on: amd64
+  - build-on: arm64
+  - build-on: armhf
+  - build-on: i386
+
+apps:
+  imagemerge:
+    command: usr/lib/ImageMerge/ImageMerge
+    desktop: snap/gui/me.tamkungz.ImageMerge.desktop
+    plugs:
+      - home
+      - network
+      - desktop
+      - desktop-legacy
+      - x11
+      - wayland
+      - opengl
+
+parts:
+  imagemerge:
+    plugin: nil
+    source: snap-src
+    override-build: |
+      set -eu
+      mkdir -p "$CRAFT_PART_INSTALL/usr/lib/ImageMerge"
+      cp -a "$CRAFT_PART_SRC"/. "$CRAFT_PART_INSTALL/usr/lib/ImageMerge/"
+      install -Dm0644 "$CRAFT_PROJECT_DIR/snap/gui/me.tamkungz.ImageMerge.desktop" "$CRAFT_PART_INSTALL/snap/gui/me.tamkungz.ImageMerge.desktop"
+      install -Dm0644 "$CRAFT_PROJECT_DIR/packaging/flatpak/me.tamkungz.ImageMerge.svg" "$CRAFT_PART_INSTALL/snap/gui/icon.svg"

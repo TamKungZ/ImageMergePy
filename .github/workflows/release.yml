@@ -40,7 +40,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rpm flatpak flatpak-builder
+          sudo apt-get install -y ruby ruby-dev rpm flatpak flatpak-builder squashfs-tools
+          if ! command -v snapcraft >/dev/null 2>&1; then
+            sudo snap install snapcraft --classic
+          fi
           sudo gem install --no-document fpm
           curl -L -o appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
@@ -207,6 +210,50 @@ jobs:
 
           flatpak-builder --force-clean --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
           flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$VERSION"
+
+      - name: Build Linux Snap package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ]; then VERSION="0.0.0"; fi
+
+          DIST_DIR=""
+          for candidate in "dist/linux/MainApp.dist" "dist/linux/ImageMerge.dist"; do
+            if [ -d "$candidate" ]; then DIST_DIR="$candidate"; break; fi
+          done
+          if [ -z "$DIST_DIR" ]; then
+            echo "Missing Linux dist folder (MainApp.dist/ImageMerge.dist)"
+            exit 1
+          fi
+
+          ARCH_RAW="$(uname -m)"
+          case "$ARCH_RAW" in
+            x86_64|amd64) ARCH_LABEL="x64" ;;
+            aarch64|arm64) ARCH_LABEL="arm64" ;;
+            armv7l|armv6l|arm) ARCH_LABEL="arm" ;;
+            i386|i686|x86) ARCH_LABEL="x86" ;;
+            *) ARCH_LABEL="x64" ;;
+          esac
+
+          rm -rf snap-src
+          mkdir -p snap-src release_assets
+          cp -a "$DIST_DIR"/. snap-src/
+
+          rm -f ./*.snap
+          export SNAPCRAFT_PROJECT_VERSION="$VERSION"
+          snapcraft --destructive-mode
+
+          SNAP_FILE=""
+          for f in ./*.snap; do
+            if [ -f "$f" ]; then SNAP_FILE="$f"; break; fi
+          done
+          if [ -z "$SNAP_FILE" ]; then
+            echo "Snap build did not produce a .snap file"
+            exit 1
+          fi
+
+          mv "$SNAP_FILE" "release_assets/ImageMerge-linux-${ARCH_LABEL}.snap"
 
       - name: Install WiX Toolset
         if: runner.os == 'Windows'
