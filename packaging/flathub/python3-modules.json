@@ -1,0 +1,73 @@
+{
+  "name": "python3-pyside6",
+  "buildsystem": "simple",
+  "build-commands": [
+    "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} \"shiboken6==6.11.0\" \"PySide6_Essentials==6.11.0\" \"PySide6_Addons==6.11.0\" \"PySide6==6.11.0\""
+  ],
+  "sources": [
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/65/cb/4bb0c76011166230daa7c0074aeb3fdb3935c83ac1fef3789b85fcd1a8fc/shiboken6-6.11.0-cp310-abi3-manylinux_2_34_x86_64.whl",
+      "sha256": "ad54e64f8192ddbdff0c54ac82b89edcd62ed623f502ea21c960541d19514053",
+      "only-arches": [
+        "x86_64"
+      ]
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/f5/96/771a6e2b530f725303d16d78a321fa4876b98b4f3615c9851880df8c1a43/shiboken6-6.11.0-cp310-abi3-manylinux_2_39_aarch64.whl",
+      "sha256": "a10dc7718104ea2dc15d5b0b96909b77162ce1c76fcc6968e6df692b947a00e9",
+      "only-arches": [
+        "aarch64"
+      ]
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/f3/a9/07c9e5c014b871c1b19caf8f994bcd50b345559b81f81671217b49559b67/pyside6_essentials-6.11.0-cp310-abi3-manylinux_2_34_x86_64.whl",
+      "sha256": "dc20e7afd5fc6fe51297db91cef997ce60844be578f7a49fc61b7ab9657a8849",
+      "only-arches": [
+        "x86_64"
+      ]
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/7c/35/f06b1b641d7600ec46374c16cd37c66fa4a22870326b4eb073a95471035f/pyside6_essentials-6.11.0-cp310-abi3-manylinux_2_39_aarch64.whl",
+      "sha256": "4854cb0a1b061e7a576d8fb7bb7cf9f49540d558b1acb7df0742a7afefe61e4e",
+      "only-arches": [
+        "aarch64"
+      ]
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/31/b9/e81172835ccc9d8b9792cc6bf7524a252a0db9a76ddd693de230402697f9/pyside6_addons-6.11.0-cp310-abi3-manylinux_2_34_x86_64.whl",
+      "sha256": "ac6fe3d4ef4497dde3efc5e896b0acd53ff6c93be4bf485f045690f919419f35",
+      "only-arches": [
+        "x86_64"
+      ]
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/a8/a4/426d9333782bf65ab2a20257d6b4b3af9b8d5d7a710da719865fab49d492/pyside6_addons-6.11.0-cp310-abi3-manylinux_2_39_aarch64.whl",
+      "sha256": "8ffb40222456078930816ebcac2f2511716d2acbc11716dd5acc5c365179a753",
+      "only-arches": [
+        "aarch64"
+      ]
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/da/89/9a1f521051714e6694ebbe2b979ded279845ec8e25cb309ca3960158d74f/pyside6-6.11.0-cp310-abi3-manylinux_2_34_x86_64.whl",
+      "sha256": "c642e2d25704ca746fd37f56feacf25c5aecc4cd40bef23d18eec81f87d9dc00",
+      "only-arches": [
+        "x86_64"
+      ]
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/c2/3d/f779d8bba00fcde31a7d7fb6b59347a70773c9cc8135592dea9972579877/pyside6-6.11.0-cp310-abi3-manylinux_2_39_aarch64.whl",
+      "sha256": "267b344c73580ac938ca63c611881fb42a3922ebfe043e271005f4f06c372c4e",
+      "only-arches": [
+        "aarch64"
+      ]
+    }
+  ]
+}
