@@ -73,7 +73,7 @@ jobs:
       - name: Validate tap repository exists
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
         run: |
           TAP_REPO="${{ steps.tap.outputs.repo }}"
           if ! gh api "repos/${TAP_REPO}" >/dev/null 2>&1; then
@@ -82,10 +82,26 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve tap default branch
+        id: tapmeta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          TAP_REPO="${{ steps.tap.outputs.repo }}"
+          DEFAULT_BRANCH="$(gh api "repos/${TAP_REPO}" --jq '.default_branch')"
+          if [ -z "$DEFAULT_BRANCH" ] || [ "$DEFAULT_BRANCH" = "null" ]; then
+            echo "Tap repository has no default branch. Create an initial commit first."
+            exit 1
+          fi
+          echo "default_branch=$DEFAULT_BRANCH" >> "$GITHUB_OUTPUT"
+
       - name: Checkout tap repository
         uses: actions/checkout@v5
         with:
           repository: ${{ steps.tap.outputs.repo }}
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          ref: ${{ steps.tapmeta.outputs.default_branch }}
           path: tap
 
       - name: Update cask file
@@ -137,6 +153,6 @@ jobs:
           gh pr create \
             --repo "${{ steps.tap.outputs.repo }}" \
             --head "$BRANCH" \
-            --base "main" \
+            --base "${{ steps.tapmeta.outputs.default_branch }}" \
             --title "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}" \
             --body "Automated cask update for release ${VERSION}."

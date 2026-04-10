@@ -58,35 +58,12 @@ jobs:
         run: |
           Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile "wingetcreate.exe"
 
-      - name: Check existing WinGet manifest
-        id: exists
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $id = $env:WINGET_PACKAGE_IDENTIFIER
-          $parts = $id.Split('.')
-          if ($parts.Count -lt 2) { throw "Invalid package identifier: $id" }
-
-          $publisher = $parts[0]
-          $package = $parts[1]
-          $first = $publisher.Substring(0,1).ToLowerInvariant()
-          $path = "repos/microsoft/winget-pkgs/contents/manifests/$first/$publisher/$package"
-
-          gh api $path *> $null
-          if ($LASTEXITCODE -eq 0) {
-            "exists=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-          else {
-            "exists=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-
       - name: Submit WinGet manifest update
         shell: powershell
         env:
           WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          $ErrorActionPreference = 'Continue'
 
           if ([string]::IsNullOrWhiteSpace($env:WINGET_GITHUB_TOKEN)) {
             throw "Missing secret: WINGET_GITHUB_TOKEN"
@@ -95,17 +72,12 @@ jobs:
           $id = $env:WINGET_PACKAGE_IDENTIFIER
           $version = "${{ steps.meta.outputs.version }}"
           $url = "${{ steps.asset.outputs.url }}"
-          $exists = "${{ steps.exists.outputs.exists }}"
 
-          if ($exists -eq 'true') {
-            .\wingetcreate.exe update $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
-            if ($LASTEXITCODE -ne 0) {
-              throw "wingetcreate update failed with exit code $LASTEXITCODE"
-            }
-          }
-          else {
+          .\wingetcreate.exe update $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "wingetcreate update failed, attempting initial submission with 'new'"
             .\wingetcreate.exe new $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
             if ($LASTEXITCODE -ne 0) {
-              throw "wingetcreate new failed with exit code $LASTEXITCODE"
+              throw "wingetcreate failed (update/new). Last exit code: $LASTEXITCODE"
             }
           }
