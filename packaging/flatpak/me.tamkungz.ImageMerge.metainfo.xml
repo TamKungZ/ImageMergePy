@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>me.tamkungz.ImageMerge</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>ImageMerge</name>
+  <summary>Open-source image and video merge tool</summary>
+  <description>
+    <p>
+      ImageMerge merges images and videos from multiple folders into one output,
+      supports duplicate removal with SHA-256, and optional file renaming.
+    </p>
+  </description>
+  <launchable type="desktop-id">me.tamkungz.ImageMerge.desktop</launchable>
+  <url type="homepage">https://dev.tamkungz.me</url>
+  <url type="bugtracker">https://github.com/TamKungZ/ImageMergePy/issues</url>
+  <developer id="me.tamkungz">
+    <name>TamKungZ_</name>
+  </developer>
+  <branding>
+    <color type="primary" scheme_preference="light">#2D5A88</color>
+    <color type="primary" scheme_preference="dark">#5E9BD6</color>
+  </branding>
+  <content_rating type="oars-1.1" />
+</component>

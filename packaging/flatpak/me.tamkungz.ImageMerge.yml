@@ -1,0 +1,29 @@
+app-id: me.tamkungz.ImageMerge
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+command: ImageMerge
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --filesystem=home
+modules:
+  - name: imagemerge
+    buildsystem: simple
+    build-commands:
+      - install -d /app/bin /app/share/applications /app/share/metainfo /app/share/icons/hicolor/scalable/apps /app/lib/ImageMerge
+      - cp -a . /app/lib/ImageMerge/
+      - install -m 0755 /app/lib/ImageMerge/ImageMerge /app/bin/ImageMerge
+      - install -m 0644 me.tamkungz.ImageMerge.desktop /app/share/applications/me.tamkungz.ImageMerge.desktop
+      - install -m 0644 me.tamkungz.ImageMerge.metainfo.xml /app/share/metainfo/me.tamkungz.ImageMerge.metainfo.xml
+      - install -m 0644 me.tamkungz.ImageMerge.svg /app/share/icons/hicolor/scalable/apps/me.tamkungz.ImageMerge.svg
+    sources:
+      - type: dir
+        path: flatpak-src
+      - type: file
+        path: packaging/flatpak/me.tamkungz.ImageMerge.desktop
+      - type: file
+        path: packaging/flatpak/me.tamkungz.ImageMerge.metainfo.xml
+      - type: file
+        path: packaging/flatpak/me.tamkungz.ImageMerge.svg

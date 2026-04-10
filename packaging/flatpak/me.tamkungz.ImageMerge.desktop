@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ImageMerge
+Comment=Open-source image and video merge tool
+Exec=ImageMerge
+Icon=me.tamkungz.ImageMerge
+Terminal=false
+Categories=Utility;Graphics;

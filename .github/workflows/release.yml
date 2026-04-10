@@ -40,7 +40,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rpm
+          sudo apt-get install -y ruby ruby-dev rpm flatpak flatpak-builder
           sudo gem install --no-document fpm
           curl -L -o appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
@@ -172,6 +172,41 @@ jobs:
           if [ "$ARCH_RAW" = "amd64" ]; then APPIMAGE_ARCH="x86_64"; fi
           if [ "$ARCH_RAW" = "arm64" ]; then APPIMAGE_ARCH="aarch64"; fi
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$APPIMAGE_ARCH" ./appimagetool ImageMerge.AppDir release_assets/ImageMerge-linux-"$ARCH_LABEL".AppImage
+
+      - name: Build Linux Flatpak bundle
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ]; then VERSION="0.0.0"; fi
+
+          DIST_DIR=""
+          for candidate in "dist/linux/MainApp.dist" "dist/linux/ImageMerge.dist"; do
+            if [ -d "$candidate" ]; then DIST_DIR="$candidate"; break; fi
+          done
+          if [ -z "$DIST_DIR" ]; then
+            echo "Missing Linux dist folder (MainApp.dist/ImageMerge.dist)"
+            exit 1
+          fi
+
+          ARCH_RAW="$(uname -m)"
+          case "$ARCH_RAW" in
+            x86_64|amd64) ARCH_LABEL="x64" ;;
+            aarch64|arm64) ARCH_LABEL="arm64" ;;
+            armv7l|armv6l|arm) ARCH_LABEL="arm" ;;
+            i386|i686|x86) ARCH_LABEL="x86" ;;
+            *) ARCH_LABEL="x64" ;;
+          esac
+
+          rm -rf flatpak-src flatpak-build-dir flatpak-repo
+          mkdir -p flatpak-src flatpak-repo release_assets
+          cp -a "$DIST_DIR"/. flatpak-src/
+
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+
+          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
+          flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$VERSION"
 
       - name: Install WiX Toolset
         if: runner.os == 'Windows'
