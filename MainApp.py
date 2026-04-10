@@ -1,6 +1,7 @@
 import argparse
 import base64
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QByteArray, QObject, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPalette
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -46,7 +47,21 @@ MODE_COPY_DELETE = "copy_delete"
 MODE_COPY_KEEP = "copy_keep"
 
 DEFAULT_LANG = "en"
-SUPPORTED_LANGS = {"en", "th"}
+LOCALES_DIR = Path(__file__).resolve().parent / "locales"
+
+
+def discover_supported_langs() -> set[str]:
+    langs = set(FILE_EMBEDDED_LOCALES.keys())
+    if LOCALES_DIR.exists():
+        for locale_file in LOCALES_DIR.glob("*.json"):
+            if locale_file.stem:
+                langs.add(locale_file.stem.lower())
+    if DEFAULT_LANG not in langs:
+        langs.add(DEFAULT_LANG)
+    return langs
+
+
+SUPPORTED_LANGS = discover_supported_langs()
 
 UUID_LIKE_RE = re.compile(
     r"^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?: \(\d+\))?$"
@@ -70,10 +85,27 @@ C_SUCCESS   = "#1ca46f"
 C_WARNING   = "#bc8500"
 C_DANGER    = "#d54949"
 
+LANGUAGE_NATIVE_NAMES = {
+    "ar": "العربية",
+    "de": "Deutsch",
+    "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "id": "Bahasa Indonesia",
+    "ja": "日本語",
+    "ko": "한국어",
+    "ru": "Русский",
+    "th": "ไทย",
+    "vi": "Tiếng Việt",
+    "zh": "中文",
+}
 
-def setup_app_fonts() -> str:
+
+def setup_app_fonts(lang: str = DEFAULT_LANG) -> str:
+    lang = (lang or DEFAULT_LANG).lower()
+    db = QFontDatabase()
+
     loaded_family = None
-
     for encoded_data in EMBEDDED_FONTS.values():
         try:
             font_bytes = base64.b64decode(encoded_data)
@@ -86,20 +118,39 @@ def setup_app_fonts() -> str:
         except Exception:
             continue
 
+    script_font_candidates: dict[str, tuple[str, ...]] = {
+        "th": ("Leelawadee UI", "Tahoma", "Noto Sans Thai", "Noto Sans"),
+        "ja": ("Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "MS UI Gothic", "Noto Sans"),
+        "ko": ("Malgun Gothic", "Noto Sans CJK KR", "Apple SD Gothic Neo", "Noto Sans"),
+        "zh": ("Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", "SimHei", "Noto Sans"),
+        "ar": ("Segoe UI", "Tahoma", "Noto Naskh Arabic", "Noto Sans Arabic", "Noto Sans", "Arial"),
+        "ru": ("Segoe UI", "Arial", "Noto Sans", "DejaVu Sans"),
+        "vi": ("Segoe UI", "Arial", "Noto Sans", "DejaVu Sans"),
+    }
+
+    if loaded_family and lang == "th":
+        return loaded_family
+
+    for font in script_font_candidates.get(lang, ()):
+        if db.hasFamily(font):
+            return font
+
     if loaded_family:
         return loaded_family
 
     if os.name == "nt":
-        return "Leelawadee UI"
-    if sys.platform == "darwin":
-        for font in ("Helvetica Neue", "Helvetica", "Arial"):
-            if QFontDatabase().hasFamily(font):
+        for font in ("Segoe UI", "Arial"):
+            if db.hasFamily(font):
                 return font
-        return "Arial"
+    elif sys.platform == "darwin":
+        for font in ("SF Pro Text", "Helvetica Neue", "Helvetica", "Arial"):
+            if db.hasFamily(font):
+                return font
+    else:
+        for font in ("Noto Sans", "DejaVu Sans", "Liberation Sans", "FreeSans"):
+            if db.hasFamily(font):
+                return font
 
-    for font in ("Noto Sans", "DejaVu Sans", "Liberation Sans", "FreeSans"):
-        if QFontDatabase().hasFamily(font):
-            return font
     return "Sans Serif"
 
 
@@ -140,19 +191,36 @@ def detect_language() -> str:
     env_lang = os.environ.get("IMAGEMERGE_LANG", "").strip().lower()
     if env_lang in SUPPORTED_LANGS:
         return env_lang
+    if "-" in env_lang or "_" in env_lang:
+        base = re.split(r"[-_]", env_lang)[0]
+        if base in SUPPORTED_LANGS:
+            return base
     return DEFAULT_LANG
 
 
 class I18n:
     def __init__(self, lang: str):
         self.catalogs: dict[str, dict[str, str]] = {}
-        self._load_catalog(DEFAULT_LANG)
-        self._load_catalog("th")
+        for code in sorted(SUPPORTED_LANGS):
+            self._load_catalog(code)
+        if not self.catalogs.get(DEFAULT_LANG):
+            self.catalogs[DEFAULT_LANG] = {}
         self.lang = lang if lang in self.catalogs else DEFAULT_LANG
 
     def _load_catalog(self, lang: str):
-        embedded = FILE_EMBEDDED_LOCALES.get(lang, {})
-        self.catalogs[lang] = {str(key): str(value) for key, value in embedded.items()}
+        catalog: dict[str, str] = {}
+        locale_file = LOCALES_DIR / f"{lang}.json"
+        if locale_file.exists():
+            try:
+                parsed = json.loads(locale_file.read_text(encoding="utf-8"))
+                if isinstance(parsed, dict):
+                    catalog = {str(key): str(value) for key, value in parsed.items()}
+            except Exception:
+                catalog = {}
+        if not catalog:
+            embedded = FILE_EMBEDDED_LOCALES.get(lang, {})
+            catalog = {str(key): str(value) for key, value in embedded.items()}
+        self.catalogs[lang] = catalog
 
     def t(self, key: str, **kwargs) -> str:
         text = self.catalogs.get(self.lang, {}).get(key)
@@ -697,7 +765,9 @@ class App(QMainWindow):
         self.worker_thread: QThread | None = None
         self.worker: ProcessWorker | None = None
 
-        self.font_family = setup_app_fonts()
+        self.font_family = setup_app_fonts(self.i18n.lang)
+        self._lang_codes = sorted(SUPPORTED_LANGS, key=lambda code: (code != DEFAULT_LANG, code))
+        self._title_desc_full = ""
         self._apply_dark_palette()
         self._build_ui()
 
@@ -785,13 +855,13 @@ class App(QMainWindow):
 
         /* Start button */
         QPushButton#startBtn {{
-            background: {C_ACCENT}; color: #ffffff; border: none;
+            background: {C_ACCENT}; color: #0f1728; border: none;
             border-radius: 10px; font-size: 20px; font-weight: 700; padding: 14px;
         }}
         QPushButton#startBtn:hover {{ background: #2b62cc; }}
         QPushButton#startBtn:pressed {{ background: #2356b7; }}
         QPushButton#startBtn:disabled {{
-            background: {C_SURFACE3}; color: {C_TEXT3};
+            background: #dbe7ff; color: #314666;
         }}
 
         /* Secondary buttons */
@@ -868,6 +938,8 @@ class App(QMainWindow):
 
         self.desc_label = QLabel()
         self.desc_label.setStyleSheet(f"color:{C_TEXT3}; font-size:13px;")
+        self.desc_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.desc_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         tb_lay.addWidget(self.desc_label)
 
         tb_lay.addSpacing(16)
@@ -878,8 +950,8 @@ class App(QMainWindow):
 
         self.lang_selector = QComboBox()
         self.lang_selector.setObjectName("langSelector")
-        self.lang_selector.addItem("", "en")
-        self.lang_selector.addItem("", "th")
+        for code in self._lang_codes:
+            self.lang_selector.addItem("", code)
         self.lang_selector.currentIndexChanged.connect(self._on_lang_selector_changed)
         tb_lay.addWidget(self.lang_selector)
 
@@ -1121,10 +1193,22 @@ class App(QMainWindow):
         self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
         self.app_name_label.setText(self.t("app_title") or APP_FALLBACK_TITLE)
 
-        self.desc_label.setText(self.t("app_desc")[:88])
+        self._title_desc_full = self.t("app_desc")
+        self._refresh_title_desc()
         self.lang_label.setText(self.t("label_language"))
-        self.lang_selector.setItemText(0, self.t("lang_en"))
-        self.lang_selector.setItemText(1, self.t("lang_th"))
+        current_code = self.lang_selector.currentData()
+        self.lang_selector.blockSignals(True)
+        for i, code in enumerate(self._lang_codes):
+            translated = self.t(f"lang_{code}")
+            if translated == f"lang_{code}":
+                translated = LANGUAGE_NATIVE_NAMES.get(code, code.upper())
+            self.lang_selector.setItemText(i, translated)
+        selected_index = self.lang_selector.findData(self.i18n.lang)
+        if selected_index >= 0:
+            self.lang_selector.setCurrentIndex(selected_index)
+        elif current_code in self._lang_codes:
+            self.lang_selector.setCurrentIndex(self.lang_selector.findData(current_code))
+        self.lang_selector.blockSignals(False)
 
         self.source_section_label.setText(self.t("section_input").upper())
         self.output_section_label.setText(self.t("section_output").upper())
@@ -1170,6 +1254,16 @@ class App(QMainWindow):
 
         self._refresh_empty_label()
 
+    def _refresh_title_desc(self):
+        if not self._title_desc_full:
+            self.desc_label.setText("")
+            self.desc_label.setToolTip("")
+            return
+        text_width = max(40, self.desc_label.width() - 4)
+        fm = QFontMetrics(self.desc_label.font())
+        self.desc_label.setText(fm.elidedText(self._title_desc_full, Qt.ElideRight, text_width))
+        self.desc_label.setToolTip(self._title_desc_full)
+
     def _refresh_empty_label(self):
         if not self.input_entries:
             self.empty_label.setText(self.t("empty_no_source"))
@@ -1182,7 +1276,14 @@ class App(QMainWindow):
         if lang not in SUPPORTED_LANGS or lang == self.i18n.lang:
             return
         self.i18n.lang = lang
+        self.font_family = setup_app_fonts(lang)
+        self._apply_dark_palette()
+        self.setStyleSheet(self._global_stylesheet())
         self._retranslate_ui()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_title_desc()
 
     def _on_mode_card_clicked(self, mode_key: str):
         self._current_mode = mode_key
@@ -1251,16 +1352,13 @@ class App(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, self.t("dlg_select_input"))
         if not folder:
             return
-        path = Path(folder)
+        path = Path(folder).expanduser().resolve()
         if any(entry["path"] == path for entry in self.input_entries):
             QMessageBox.information(self, self.t("app_title"), self.t("msg_folder_exists"))
             return
-        prefix = self.prompt_prefix(path.name)
-        if prefix is None:
-            return
-        entry = {"path": path, "prefix": prefix}
+        entry = {"path": path, "prefix": ""}
         self.input_entries.append(entry)
-        self._add_source_row(str(path), prefix)
+        self._add_source_row(str(path), "")
         self._refresh_empty_label()
 
     def edit_selected_prefix(self):
@@ -1332,12 +1430,8 @@ class App(QMainWindow):
         self.worker_thread.started.connect(self.worker.run)
         self.worker.log_line.connect(self.append_log)
         self.worker.log_line.connect(self._parse_log_for_stats)
-        self.worker.process_done.connect(
-            lambda: QMessageBox.information(self, self.t("app_title"), self.t("msg_done"))
-        )
-        self.worker.process_error.connect(
-            lambda msg: QMessageBox.critical(self, self.t("app_title"), msg)
-        )
+        self.worker.process_done.connect(self._on_worker_process_done)
+        self.worker.process_error.connect(self._on_worker_process_error)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
@@ -1369,6 +1463,12 @@ class App(QMainWindow):
         self.start_btn.setText(self.t("btn_start"))
         self.worker = None
         self.worker_thread = None
+
+    def _on_worker_process_done(self):
+        QMessageBox.information(self, self.t("app_title"), self.t("msg_done"))
+
+    def _on_worker_process_error(self, msg: str):
+        QMessageBox.critical(self, self.t("app_title"), msg)
 
 
 if __name__ == "__main__":

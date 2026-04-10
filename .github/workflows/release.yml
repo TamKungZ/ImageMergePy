@@ -307,10 +307,20 @@ jobs:
               }
               return aliases.get(arch, 'x64')
 
-          def zip_dir(name: str, source_dir: Path):
+          def zip_dir(name: str, source_dir: Path, top_level: str = 'ImageMerge'):
               if not source_dir.exists():
                   raise FileNotFoundError(f'Missing build output: {source_dir}')
-              shutil.make_archive(str(out / name), 'zip', root_dir=source_dir.parent, base_dir=source_dir.name)
+              staging_root = root / 'zip_staging' / name
+              if staging_root.exists():
+                  shutil.rmtree(staging_root)
+              payload_root = staging_root / top_level
+              payload_root.parent.mkdir(parents=True, exist_ok=True)
+              if source_dir.is_dir():
+                  shutil.copytree(source_dir, payload_root, dirs_exist_ok=True)
+              else:
+                  raise FileNotFoundError(f'Unsupported build output type: {source_dir}')
+              shutil.make_archive(str(out / name), 'zip', root_dir=staging_root, base_dir=top_level)
+              shutil.rmtree(staging_root, ignore_errors=True)
 
           def first_existing(candidates):
               for candidate in candidates:
@@ -326,7 +336,7 @@ jobs:
               ])
               if dist_dir is None:
                   raise FileNotFoundError('Missing Windows dist folder (MainApp.dist/ImageMerge.dist)')
-              zip_dir(f'ImageMerge-windows-{arch}', dist_dir)
+              zip_dir(f'ImageMerge-windows-{arch}', dist_dir, 'ImageMerge')
           elif runner == 'Linux':
               import platform
               arch = normalize_arch(platform.machine())
@@ -336,7 +346,7 @@ jobs:
               ])
               if dist_dir is None:
                   raise FileNotFoundError('Missing Linux dist folder (MainApp.dist/ImageMerge.dist)')
-              zip_dir(f'ImageMerge-linux-{arch}', dist_dir)
+              zip_dir(f'ImageMerge-linux-{arch}', dist_dir, 'ImageMerge')
           elif runner == 'macOS':
               import platform
               arch = normalize_arch(platform.machine())
@@ -346,12 +356,12 @@ jobs:
               ])
               if dist_dir is None:
                   raise FileNotFoundError('Missing macOS binary dist folder (MainApp.dist/ImageMerge.dist)')
-              zip_dir(f'ImageMerge-macos-binary-{arch}', dist_dir)
+              zip_dir(f'ImageMerge-macos-binary-{arch}', dist_dir, 'ImageMerge')
 
               app_candidates = sorted((root / 'dist' / 'macos-app').glob('*.app'))
               if not app_candidates:
                   raise FileNotFoundError('Missing macOS app bundle (*.app) in dist/macos-app')
-              zip_dir(f'ImageMerge-macos-app-{arch}', app_candidates[0])
+              zip_dir(f'ImageMerge-macos-app-{arch}', app_candidates[0], 'ImageMerge')
           else:
               raise RuntimeError(f'Unsupported RUNNER_OS: {runner}')
           PY
