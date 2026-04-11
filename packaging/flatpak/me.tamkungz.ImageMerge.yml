@@ -12,18 +12,15 @@ modules:
   - name: imagemerge
     buildsystem: simple
     build-commands:
-      - install -d /app/bin /app/share/applications /app/share/metainfo /app/share/icons/hicolor/scalable/apps /app/lib/ImageMerge
+      - install -d /app/bin /app/share/applications /app/share/icons/hicolor/scalable/apps /app/lib/ImageMerge
       - cp -a . /app/lib/ImageMerge/
       - install -m 0755 /app/lib/ImageMerge/ImageMerge /app/bin/ImageMerge
       - install -m 0644 me.tamkungz.ImageMerge.desktop /app/share/applications/me.tamkungz.ImageMerge.desktop
-      - install -m 0644 me.tamkungz.ImageMerge.metainfo.xml /app/share/metainfo/me.tamkungz.ImageMerge.metainfo.xml
       - install -m 0644 me.tamkungz.ImageMerge.svg /app/share/icons/hicolor/scalable/apps/me.tamkungz.ImageMerge.svg
     sources:
       - type: dir
         path: flatpak-src
       - type: file
         path: me.tamkungz.ImageMerge.desktop
-      - type: file
-        path: me.tamkungz.ImageMerge.metainfo.xml
       - type: file
         path: me.tamkungz.ImageMerge.svg
