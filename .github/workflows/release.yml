@@ -21,7 +21,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-13, macos-latest]
+        # Pin Linux runner to Ubuntu 22.04 so AppImage/.deb/.rpm are built
+        # against glibc 2.35 instead of newer glibc from ubuntu-latest.
+        os: [windows-latest, ubuntu-22.04, macos-13, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -128,10 +130,15 @@ jobs:
               encoding='utf-8',
           )
 
-          icon_png = base64.b64decode(
-              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0XcAAAAASUVORK5CYII='
-          )
+          icon_source = root / 'assets' / 'imagemerge-icon-1024.png'
+          if icon_source.exists():
+              icon_png = icon_source.read_bytes()
+          else:
+              icon_png = base64.b64decode(
+                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0XcAAAAASUVORK5CYII='
+              )
           (appdir / 'ImageMerge.png').write_bytes(icon_png)
+          (appdir / '.DirIcon').write_bytes(icon_png)
 
           print('Prepared Linux packaging trees')
           PY

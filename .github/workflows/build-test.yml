@@ -15,7 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # Pin Linux runner to Ubuntu 22.04 so produced Linux binaries
+        # target glibc 2.35 (compatible with Ubuntu 22.04+ users).
+        os: [windows-latest, ubuntu-22.04, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v5

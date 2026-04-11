@@ -44,6 +44,8 @@ def run_cmd(cmd: list[str], cwd: Path, retries: int = 1, retry_cleanup=None):
                 retry_cleanup()
             time.sleep(1.5)
 
+    if last_error is None:
+        raise RuntimeError("Command failed without a captured exception")
     raise last_error
 
 
@@ -107,6 +109,8 @@ def load_app_metadata(root: Path) -> dict[str, str]:
         "product_version": "1.0.0.0",
         "copyright": "",
         "icon_ico": "",
+        "icon_icns": "",
+        "icon_png": "assets/imagemerge-icon-1024.png",
     }
 
     metadata_path = root / METADATA_FILE
@@ -151,6 +155,67 @@ def windows_metadata_args(root: Path, metadata: dict[str, str]) -> list[str]:
             print(f"Icon not found, skipping icon metadata: {icon_path}")
 
     return args
+
+
+def resolve_macos_icon(root: Path, metadata: dict[str, str]) -> Path | None:
+    icon_candidates: list[Path] = []
+
+    icon_icns = metadata.get("icon_icns", "").strip()
+    if icon_icns:
+        icon_candidates.append(root / icon_icns)
+    icon_candidates.append(root / "assets" / "icon.icns")
+
+    for candidate in icon_candidates:
+        if candidate.exists():
+            return candidate
+
+    png_relative = metadata.get("icon_png", "assets/imagemerge-icon-1024.png").strip()
+    if not png_relative:
+        return None
+
+    png_source = root / png_relative
+    if not png_source.exists():
+        return None
+
+    try:
+        iconset_dir = root / "build" / "ImageMerge.iconset"
+        if iconset_dir.exists():
+            shutil.rmtree(iconset_dir)
+        iconset_dir.mkdir(parents=True, exist_ok=True)
+
+        iconset_entries = [
+            ("icon_16x16.png", 16),
+            ("icon_16x16@2x.png", 32),
+            ("icon_32x32.png", 32),
+            ("icon_32x32@2x.png", 64),
+            ("icon_128x128.png", 128),
+            ("icon_128x128@2x.png", 256),
+            ("icon_256x256.png", 256),
+            ("icon_256x256@2x.png", 512),
+            ("icon_512x512.png", 512),
+            ("icon_512x512@2x.png", 1024),
+        ]
+
+        for file_name, size in iconset_entries:
+            run_cmd(
+                [
+                    "sips",
+                    "-z",
+                    str(size),
+                    str(size),
+                    str(png_source),
+                    "--out",
+                    str(iconset_dir / file_name),
+                ],
+                root,
+            )
+
+        generated_icns = root / "assets" / "icon.icns"
+        run_cmd(["iconutil", "-c", "icns", str(iconset_dir), "-o", str(generated_icns)], root)
+        return generated_icns if generated_icns.exists() else None
+    except Exception as exc:
+        print(f"Unable to generate macOS icon automatically: {exc}")
+        return None
 
 
 def sign_windows_binary(binary_path: Path):
@@ -256,10 +321,20 @@ def build_linux(root: Path):
 
 def build_macos(root: Path):
     out_bin_dir = root / "dist" / "macos-binary"
+    metadata = load_app_metadata(root)
+
     mode = run_build_with_fallback(root, out_bin_dir, ["--onefile", "--onefile-no-compression"], [])
 
     out_app_dir = root / "dist" / "macos-app"
-    app_cmd = nuitka_base_cmd(root, out_app_dir) + ["--macos-create-app-bundle", ENTRY_FILE]
+    app_cmd = nuitka_base_cmd(root, out_app_dir) + ["--macos-create-app-bundle"]
+
+    macos_icon = resolve_macos_icon(root, metadata)
+    if macos_icon is not None:
+        app_cmd.append(f"--macos-app-icon={macos_icon}")
+    else:
+        print("macOS icon not found; building app bundle without custom .icns")
+
+    app_cmd.append(ENTRY_FILE)
     run_cmd(app_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_app_dir))
 
     if mode == "onefile":

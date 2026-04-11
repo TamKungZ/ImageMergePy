@@ -6,5 +6,7 @@
   "file_version": "1.0.3.0",
   "product_version": "1.0.3.0",
   "copyright": "Copyright (c) 2026 TamKungZ_ (MIT License)",
-  "icon_ico": "assets/icon.ico"
+  "icon_ico": "assets/icon.ico",
+  "icon_icns": "assets/icon.icns",
+  "icon_png": "assets/imagemerge-icon-1024.png"
 }

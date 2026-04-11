@@ -95,10 +95,20 @@ jobs:
           echo "owner=$TAP_OWNER" >> "$GITHUB_OUTPUT"
           echo "base_repo=$BASE_REPO" >> "$GITHUB_OUTPUT"
 
+      - name: Validate tap token
+        shell: bash
+        run: |
+          TAP_REPO="${{ steps.tap.outputs.repo }}"
+          if [ "$TAP_REPO" != "${{ github.repository }}" ] && [ -z "${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}" ]; then
+            echo "Missing secret: HOMEBREW_TAP_GITHUB_TOKEN"
+            echo "This workflow needs a token with access to ${TAP_REPO} for checkout/push/PR."
+            exit 1
+          fi
+
       - name: Validate tap repository exists
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
         run: |
           TAP_REPO="${{ steps.tap.outputs.repo }}"
           if ! gh api "repos/${TAP_REPO}" >/dev/null 2>&1; then
@@ -110,7 +120,7 @@ jobs:
       - name: Validate base repository exists
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
         run: |
           BASE_REPO="${{ steps.tap.outputs.base_repo }}"
           if ! gh api "repos/${BASE_REPO}" >/dev/null 2>&1; then
@@ -123,7 +133,7 @@ jobs:
         id: tapmeta
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
         run: |
           BASE_REPO="${{ steps.tap.outputs.base_repo }}"
           DEFAULT_BRANCH="$(gh api "repos/${BASE_REPO}" --jq '.default_branch')"
@@ -137,7 +147,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: ${{ steps.tap.outputs.repo }}
-          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
           ref: ${{ steps.tapmeta.outputs.default_branch }}
           path: tap
 
@@ -198,7 +208,7 @@ jobs:
       - name: Cleanup old cask branches
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
         run: |
           TAP_REPO="${{ steps.tap.outputs.repo }}"
           PREFIX="heads/chore/cask-${{ env.CASK_NAME }}-"
@@ -216,9 +226,10 @@ jobs:
         id: pr
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
         run: |
-          if [ -z "$GH_TOKEN" ]; then
+          TAP_REPO="${{ steps.tap.outputs.repo }}"
+          if [ "$TAP_REPO" != "${{ github.repository }}" ] && [ -z "${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}" ]; then
             echo "Missing secret: HOMEBREW_TAP_GITHUB_TOKEN"
             exit 1
           fi
@@ -253,7 +264,7 @@ jobs:
       - name: Auto-merge and delete branch
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
         run: |
           TAP_REPO="${{ steps.tap.outputs.repo }}"
           BASE_REPO="${{ steps.tap.outputs.base_repo }}"
