@@ -45,10 +45,28 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rpm flatpak flatpak-builder squashfs-tools appstream appstream-compose
+          sudo apt-get install -y ruby ruby-dev rpm flatpak flatpak-builder squashfs-tools appstream appstream-compose snapd
           if ! command -v snapcraft >/dev/null 2>&1; then
             sudo snap install snapcraft --classic
           fi
+          sudo systemctl start snapd.socket snapd.service >/dev/null 2>&1 || true
+          sudo snap wait system seed.loaded >/dev/null 2>&1 || true
+
+          if ! snap list core22 >/dev/null 2>&1; then
+            for attempt in 1 2 3; do
+              if sudo snap install core22 --channel=latest/stable; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "Failed to install required snap base 'core22' after retries"
+                exit 1
+              fi
+              echo "Retrying core22 installation ($attempt/3)..."
+              sudo systemctl restart snapd.service >/dev/null 2>&1 || true
+              sleep $((attempt * 10))
+            done
+          fi
+
           sudo gem install --no-document fpm
           curl -L -o appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
@@ -342,7 +360,24 @@ jobs:
 
           rm -f ./*.snap
           export SNAPCRAFT_PROJECT_VERSION="$VERSION"
-          snapcraft --destructive-mode
+
+          SNAP_BUILD_OK=0
+          for attempt in 1 2 3; do
+            if snapcraft pack --destructive-mode; then
+              SNAP_BUILD_OK=1
+              break
+            fi
+
+            echo "snapcraft pack failed (attempt ${attempt}/3), retrying..."
+            sudo snap install core22 --channel=latest/stable >/dev/null 2>&1 || true
+            sudo systemctl restart snapd.service >/dev/null 2>&1 || true
+            sleep $((attempt * 12))
+          done
+
+          if [ "$SNAP_BUILD_OK" -ne 1 ]; then
+            echo "Snap build failed after retries"
+            exit 1
+          fi
 
           SNAP_FILE=""
           for f in ./*.snap; do
