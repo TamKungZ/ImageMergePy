@@ -177,15 +177,22 @@ jobs:
           BASE_REPO="${{ steps.target.outputs.base_repo }}"
           TARGET_OWNER="${{ steps.target.outputs.target_owner }}"
           BRANCH="${{ steps.commit.outputs.branch }}"
+          BASE_BRANCH="${{ steps.basemeta.outputs.default_branch }}"
 
-          PR_URL="$(gh pr create \
+          if PR_URL="$(gh pr create \
             --repo "$BASE_REPO" \
             --head "${TARGET_OWNER}:${BRANCH}" \
-            --base "${{ steps.basemeta.outputs.default_branch }}" \
+            --base "$BASE_BRANCH" \
             --title "${{ env.FLATPAK_APP_ID }}: update to ${VERSION}" \
-            --body "Automated Flathub manifest update for release ${VERSION}.\n\n- App ID: ${{ env.FLATPAK_APP_ID }}\n- Source: ${{ steps.source.outputs.url }}\n- SHA256: ${{ steps.source.outputs.sha256 }}")"
+            --body "Automated Flathub manifest update for release ${VERSION}.\n\n- App ID: ${{ env.FLATPAK_APP_ID }}\n- Source: ${{ steps.source.outputs.url }}\n- SHA256: ${{ steps.source.outputs.sha256 }}")"; then
+            echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "Automatic PR creation failed (likely token scope restriction)."
+          FALLBACK_URL="https://github.com/${BASE_REPO}/compare/${BASE_BRANCH}...${TARGET_OWNER}:${BRANCH}?expand=1"
+          echo "Open this URL to create the PR manually: ${FALLBACK_URL}"
+          echo "url=${FALLBACK_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Print PR URL
         if: steps.commit.outputs.changed == 'true'
