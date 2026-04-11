@@ -1,4 +1,4 @@
-name: imagemerge
+name: tamkungz-imagemerge
 base: core22
 version: git
 summary: Open-source image and video merge tool
