@@ -62,6 +62,7 @@ jobs:
           import os
           import shutil
           import stat
+          import subprocess
           from pathlib import Path
 
           root = Path('.')
@@ -108,6 +109,49 @@ jobs:
           (appdir / 'usr' / 'lib' / 'ImageMerge').mkdir(parents=True, exist_ok=True)
           shutil.copytree(dist_dir, appdir / 'usr' / 'lib' / 'ImageMerge', dirs_exist_ok=True)
           (appdir / 'usr' / 'share' / 'applications').mkdir(parents=True, exist_ok=True)
+
+          app_lib_dir = appdir / 'usr' / 'lib' / 'ImageMerge'
+
+          def resolve_system_library(soname: str) -> Path | None:
+              try:
+                  output = subprocess.check_output(['ldconfig', '-p'], text=True)
+              except Exception:
+                  return None
+              for line in output.splitlines():
+                  line = line.strip()
+                  if not line or '=>' not in line:
+                      continue
+                  if line.startswith(f'{soname} '):
+                      return Path(line.rsplit('=>', 1)[1].strip())
+              return None
+
+          appimage_runtime_libs = [
+              'libxcb-cursor.so.0',
+              'libxkbcommon-x11.so.0',
+              'libxcb-icccm.so.4',
+              'libxcb-keysyms.so.1',
+              'libxcb-randr.so.0',
+              'libxcb-shape.so.0',
+              'libxcb-xfixes.so.0',
+              'libxcb-xinerama.so.0',
+              'libxcb-render-util.so.0',
+              'libxcb-image.so.0',
+              'libX11-xcb.so.1',
+              'libxkbcommon.so.0',
+          ]
+
+          copied_runtime_libs = []
+          for soname in appimage_runtime_libs:
+              lib_path = resolve_system_library(soname)
+              if lib_path is None or not lib_path.exists():
+                  print(f'Warning: system library not found for AppImage bundling: {soname}')
+                  continue
+              target_path = app_lib_dir / lib_path.name
+              shutil.copy2(lib_path, target_path)
+              copied_runtime_libs.append(target_path.name)
+
+          if copied_runtime_libs:
+              print('Bundled AppImage runtime libraries:', ', '.join(sorted(copied_runtime_libs)))
 
           apprun = appdir / 'AppRun'
           apprun.write_text(
@@ -175,10 +219,46 @@ jobs:
               ;;
           esac
 
-          fpm -s dir -t deb -n imagemerge -v "$VERSION" --iteration 1 --architecture "$DEB_ARCH" --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" -C pkgroot .
+          DEB_DEPENDS=(
+            "libxcb-cursor0"
+            "libxkbcommon-x11-0"
+            "libxcb-icccm4"
+            "libxcb-keysyms1"
+            "libxcb-randr0"
+            "libxcb-shape0"
+            "libxcb-xfixes0"
+            "libxcb-xinerama0"
+            "libx11-xcb1"
+            "libxcb-render-util0"
+            "libxcb-image0"
+            "libegl1"
+            "libgl1"
+          )
+          DEB_DEP_ARGS=()
+          for dep in "${DEB_DEPENDS[@]}"; do
+            DEB_DEP_ARGS+=(--depends "$dep")
+          done
+
+          fpm -s dir -t deb -n imagemerge -v "$VERSION" --iteration 1 --architecture "$DEB_ARCH" --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" "${DEB_DEP_ARGS[@]}" -C pkgroot .
           mv imagemerge_*_"$DEB_ARCH".deb release_assets/ImageMerge-linux-"$ARCH_LABEL".deb
 
-          fpm -s dir -t rpm -n imagemerge -v "$VERSION" --iteration 1 --architecture "$RPM_ARCH" --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" -C pkgroot .
+          RPM_DEPENDS=(
+            "libxcb-cursor"
+            "libxkbcommon-x11"
+            "xcb-util-wm"
+            "xcb-util-keysyms"
+            "xcb-util-renderutil"
+            "xcb-util-image"
+            "libX11-xcb"
+            "libEGL"
+            "libGL"
+          )
+          RPM_DEP_ARGS=()
+          for dep in "${RPM_DEPENDS[@]}"; do
+            RPM_DEP_ARGS+=(--depends "$dep")
+          done
+
+          fpm -s dir -t rpm -n imagemerge -v "$VERSION" --iteration 1 --architecture "$RPM_ARCH" --license MIT --maintainer "TamKungZ_" --description "Open-source image and video merge tool" --url "https://github.com/${GITHUB_REPOSITORY}" "${RPM_DEP_ARGS[@]}" -C pkgroot .
           mv imagemerge-*.$RPM_ARCH.rpm release_assets/ImageMerge-linux-"$ARCH_LABEL".rpm
 
           APPIMAGE_ARCH="$ARCH_RAW"

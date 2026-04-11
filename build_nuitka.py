@@ -274,6 +274,14 @@ def try_onefile() -> bool:
     return os.environ.get("IMAGEMERGE_ONEFILE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def onefile_strict() -> bool:
+    return os.environ.get("IMAGEMERGE_ONEFILE_STRICT", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def binary_only() -> bool:
+    return os.environ.get("IMAGEMERGE_BINARY_ONLY", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def run_build_with_fallback(root: Path, out_dir: Path, onefile_args: list[str], standalone_args: list[str]):
     if try_onefile():
         onefile_cmd = nuitka_base_cmd(root, out_dir) + onefile_args + [ENTRY_FILE]
@@ -281,6 +289,8 @@ def run_build_with_fallback(root: Path, out_dir: Path, onefile_args: list[str], 
             run_cmd(onefile_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
             return "onefile"
         except subprocess.CalledProcessError:
+            if onefile_strict():
+                raise
             print("Onefile build failed on this environment, falling back to standalone build.")
 
     standalone_cmd = nuitka_base_cmd(root, out_dir) + standalone_args + [ENTRY_FILE]
@@ -311,6 +321,9 @@ def build_windows(root: Path):
 
 
 def build_linux(root: Path):
+    if shutil.which("patchelf") is None:
+        raise RuntimeError("Missing required tool 'patchelf'. Install it first (Ubuntu/Debian: sudo apt install -y patchelf)")
+
     out_dir = root / "dist" / "linux"
     mode = run_build_with_fallback(root, out_dir, ["--onefile", "--onefile-no-compression"], [])
     if mode == "onefile":
@@ -325,6 +338,15 @@ def build_macos(root: Path):
 
     mode = run_build_with_fallback(root, out_bin_dir, ["--onefile", "--onefile-no-compression"], [])
 
+    if mode == "onefile":
+        print(f"Mach-O binary ready: {out_bin_dir / APP_NAME}")
+    else:
+        print(f"Mach-O binary ready: {out_bin_dir / (APP_NAME + '.dist') / APP_NAME}")
+
+    if binary_only():
+        print("Binary-only mode enabled; skipping macOS .app bundle build.")
+        return
+
     out_app_dir = root / "dist" / "macos-app"
     app_cmd = nuitka_base_cmd(root, out_app_dir) + ["--macos-create-app-bundle"]
 
@@ -337,10 +359,6 @@ def build_macos(root: Path):
     app_cmd.append(ENTRY_FILE)
     run_cmd(app_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_app_dir))
 
-    if mode == "onefile":
-        print(f"Mach-O binary ready: {out_bin_dir / APP_NAME}")
-    else:
-        print(f"Mach-O binary ready: {out_bin_dir / (APP_NAME + '.dist') / APP_NAME}")
     print(f"App bundle ready: {out_app_dir / (APP_NAME + '.app')}")
 
 
