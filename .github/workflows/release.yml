@@ -298,7 +298,7 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
 
-          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
+          flatpak-builder --force-clean --no-appstream --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
           flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$VERSION"
 
       - name: Build Linux Snap package
