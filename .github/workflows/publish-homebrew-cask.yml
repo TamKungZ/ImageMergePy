@@ -195,7 +195,25 @@ jobs:
             } > "tap/Casks/${{ env.CASK_NAME }}.rb"
           fi
 
+      - name: Cleanup old cask branches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          TAP_REPO="${{ steps.tap.outputs.repo }}"
+          PREFIX="heads/chore/cask-${{ env.CASK_NAME }}-"
+          REFS_JSON="$(gh api "repos/${TAP_REPO}/git/matching-refs/${PREFIX}" 2>/dev/null || echo '[]')"
+
+          echo "$REFS_JSON" | jq -r '.[].ref // empty' | while IFS= read -r ref; do
+            branch="${ref#refs/heads/}"
+            if [ -z "$branch" ]; then
+              continue
+            fi
+            gh api -X DELETE "repos/${TAP_REPO}/git/refs/heads/${branch}" >/dev/null 2>&1 || true
+          done
+
       - name: Create pull request in tap repo
+        id: pr
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
@@ -221,9 +239,35 @@ jobs:
           git -C tap commit -m "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}"
           git -C tap push -u origin "$BRANCH"
 
-          gh pr create \
+          PR_URL="$(gh pr create \
             --repo "${{ steps.tap.outputs.base_repo }}" \
             --head "${{ steps.tap.outputs.owner }}:$BRANCH" \
             --base "${{ steps.tapmeta.outputs.default_branch }}" \
             --title "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}" \
-            --body "Automated cask update for release ${VERSION}."
+            --body "Automated cask update for release ${VERSION}.")"
+
+          PR_NUMBER="$(gh pr view "$PR_URL" --repo "${{ steps.tap.outputs.base_repo }}" --json number --jq '.number')"
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Auto-merge and delete branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          TAP_REPO="${{ steps.tap.outputs.repo }}"
+          BASE_REPO="${{ steps.tap.outputs.base_repo }}"
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No pull request number found, skipping auto-merge"
+            exit 0
+          fi
+
+          if [ "$TAP_REPO" != "$BASE_REPO" ]; then
+            echo "Base repo differs from tap repo ($BASE_REPO). Skipping auto-merge."
+            exit 0
+          fi
+
+          gh pr merge "$PR_NUMBER" --repo "$BASE_REPO" --squash --delete-branch >/dev/null 2>&1 || \
+            gh pr merge "$PR_NUMBER" --repo "$BASE_REPO" --auto --squash --delete-branch >/dev/null 2>&1 || true
