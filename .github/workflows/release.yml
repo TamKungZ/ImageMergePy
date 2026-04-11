@@ -307,8 +307,9 @@ jobs:
             fi
           fi
 
-          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
-          flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$VERSION"
+          FLATPAK_BRANCH="stable"
+          flatpak-builder --force-clean --default-branch="$FLATPAK_BRANCH" --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
+          flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$FLATPAK_BRANCH"
 
       - name: Build Linux Snap package
         if: runner.os == 'Linux'
