@@ -298,7 +298,16 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
 
-          flatpak-builder --force-clean --no-appstream --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
+          if ! command -v appstream-compose >/dev/null 2>&1; then
+            if command -v appstreamcli >/dev/null 2>&1; then
+              mkdir -p .ci-bin
+              printf '%s\n' '#!/usr/bin/env bash' 'exec appstreamcli compose "$@"' > .ci-bin/appstream-compose
+              chmod +x .ci-bin/appstream-compose
+              export PATH="$PWD/.ci-bin:$PATH"
+            fi
+          fi
+
+          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
           flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$VERSION"
 
       - name: Build Linux Snap package
