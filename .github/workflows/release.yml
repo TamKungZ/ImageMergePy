@@ -301,60 +301,80 @@ jobs:
 
           heat dir "$distDir" -cg ImageMergeFiles -dr INSTALLFOLDER -scom -sreg -srd -gg -var var.SourceDir -out installer\ImageMergeFiles.wxs
 
-          $wxs = @(
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">',
-            ('  <Product Id="*" Name="ImageMerge" Language="1033" Version="{0}" Manufacturer="TamKungZ_" UpgradeCode="C5A07E9D-9634-44F0-8D8E-050A2F31A8E9">' -f $msiVersion),
-            '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />',
-            '    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />',
-            '    <MediaTemplate EmbedCab="yes" />',
-            '    <Property Id="ARPCONTACT" Value="TamKungZ_" />',
-            '    <Property Id="ARPURLINFOABOUT" Value="https://github.com" />',
-            '    <Property Id="ARPHELPLINK" Value="https://github.com" />',
-            ('    <Icon Id="AppIcon.ico" SourceFile="{0}" />' -f $iconPath),
-            '    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />',
-            '    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />',
-            '    <UIRef Id="WixUI_InstallDir" />',
-            '    <Feature Id="MainFeature" Title="ImageMerge" Level="1">',
-            '      <ComponentGroupRef Id="ImageMergeFiles" />',
-            '      <ComponentGroupRef Id="ImageMergeShortcuts" />',
-            '    </Feature>',
-            '  </Product>',
-            '',
-            '  <Fragment>',
-            '    <Directory Id="TARGETDIR" Name="SourceDir">',
-            ('      <Directory Id="{0}">' -f $programFilesDirId),
-            '        <Directory Id="INSTALLFOLDER" Name="ImageMerge" />',
-            '      </Directory>',
-            '      <Directory Id="ProgramMenuFolder">',
-            '        <Directory Id="ImageMergeProgramMenuFolder" Name="ImageMerge" />',
-            '      </Directory>',
-            '      <Directory Id="DesktopFolder" />',
-            '    </Directory>',
-            '  </Fragment>',
-            '',
-            '  <Fragment>',
-            '    <ComponentGroup Id="ImageMergeShortcuts">',
-            '      <Component Id="StartMenuShortcutComponent" Directory="ImageMergeProgramMenuFolder" Guid="*">',
-            '        <Shortcut Id="StartMenuShortcut" Name="ImageMerge" Description="ImageMerge" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />',
-            '        <RemoveFolder Id="RemoveImageMergeProgramMenuFolder" On="uninstall" />',
-            '        <RegistryValue Root="HKCU" Key="Software\TamKungZ_\ImageMerge" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />',
-            '      </Component>',
-            '      <Component Id="DesktopShortcutComponent" Directory="DesktopFolder" Guid="*">',
-            '        <Shortcut Id="DesktopShortcut" Name="ImageMerge" Description="ImageMerge" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />',
-            '        <RegistryValue Root="HKCU" Key="Software\TamKungZ_\ImageMerge" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />',
-            '      </Component>',
-            '    </ComponentGroup>',
-            '  </Fragment>',
-            '',
-            '</Wix>'
-          ) -join "`n"
+          function Write-WixDefinition {
+            param(
+              [string]$WxsPath,
+              [string]$ProductName,
+              [string]$UpgradeCode,
+              [string]$RegistryName
+            )
 
-          Set-Content -Path installer\ImageMerge.wxs -Value $wxs -Encoding UTF8
+            $wxs = @(
+              '<?xml version="1.0" encoding="UTF-8"?>',
+              '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">',
+              ('  <Product Id="*" Name="{0}" Language="1033" Version="{1}" Manufacturer="TamKungZ_" UpgradeCode="{2}">' -f $ProductName, $msiVersion, $UpgradeCode),
+              '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />',
+              '    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />',
+              '    <MediaTemplate EmbedCab="yes" />',
+              '    <Property Id="ARPCONTACT" Value="TamKungZ_" />',
+              '    <Property Id="ARPURLINFOABOUT" Value="https://github.com" />',
+              '    <Property Id="ARPHELPLINK" Value="https://github.com" />',
+              ('    <Icon Id="AppIcon.ico" SourceFile="{0}" />' -f $iconPath),
+              '    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />',
+              '    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />',
+              '    <UIRef Id="WixUI_InstallDir" />',
+              ('    <Feature Id="MainFeature" Title="{0}" Level="1">' -f $ProductName),
+              '      <ComponentGroupRef Id="ImageMergeFiles" />',
+              '      <ComponentGroupRef Id="ImageMergeShortcuts" />',
+              '    </Feature>',
+              '  </Product>',
+              '',
+              '  <Fragment>',
+              '    <Directory Id="TARGETDIR" Name="SourceDir">',
+              ('      <Directory Id="{0}">' -f $programFilesDirId),
+              ('        <Directory Id="INSTALLFOLDER" Name="{0}" />' -f $ProductName),
+              '      </Directory>',
+              '      <Directory Id="ProgramMenuFolder">',
+              ('        <Directory Id="ImageMergeProgramMenuFolder" Name="{0}" />' -f $ProductName),
+              '      </Directory>',
+              '      <Directory Id="DesktopFolder" />',
+              '    </Directory>',
+              '  </Fragment>',
+              '',
+              '  <Fragment>',
+              '    <ComponentGroup Id="ImageMergeShortcuts">',
+              '      <Component Id="StartMenuShortcutComponent" Directory="ImageMergeProgramMenuFolder" Guid="*">',
+              ('        <Shortcut Id="StartMenuShortcut" Name="{0}" Description="{0}" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />' -f $ProductName),
+              '        <RemoveFolder Id="RemoveImageMergeProgramMenuFolder" On="uninstall" />',
+              ('        <RegistryValue Root="HKCU" Key="Software\TamKungZ_\{0}" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />' -f $RegistryName),
+              '      </Component>',
+              '      <Component Id="DesktopShortcutComponent" Directory="DesktopFolder" Guid="*">',
+              ('        <Shortcut Id="DesktopShortcut" Name="{0}" Description="{0}" Target="[INSTALLFOLDER]ImageMerge.exe" WorkingDirectory="INSTALLFOLDER" />' -f $ProductName),
+              ('        <RegistryValue Root="HKCU" Key="Software\TamKungZ_\{0}" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />' -f $RegistryName),
+              '      </Component>',
+              '    </ComponentGroup>',
+              '  </Fragment>',
+              '',
+              '</Wix>'
+            ) -join "`n"
+
+            Set-Content -Path $WxsPath -Value $wxs -Encoding UTF8
+          }
+
+          $standardWxsPath = "installer\ImageMerge.wxs"
+          $msStoreWxsPath = "installer\ImageMergeGUI.wxs"
+
+          Write-WixDefinition -WxsPath $standardWxsPath -ProductName "ImageMerge" -UpgradeCode "C5A07E9D-9634-44F0-8D8E-050A2F31A8E9" -RegistryName "ImageMerge"
+          Write-WixDefinition -WxsPath $msStoreWxsPath -ProductName "ImageMergeGUI" -UpgradeCode "A7E84311-245A-4287-B710-95A783D047A8" -RegistryName "ImageMergeGUI"
 
           $wixArch = if ($archLabel -eq "x86") { "x86" } else { "x64" }
-          candle -dSourceDir="$distDir" installer\ImageMerge.wxs installer\ImageMergeFiles.wxs -arch $wixArch
+
+          candle -dSourceDir="$distDir" installer\ImageMergeFiles.wxs -arch $wixArch
+          candle -dSourceDir="$distDir" $standardWxsPath -arch $wixArch
           light -spdb -ext WixUIExtension ImageMerge.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
+
+          candle -dSourceDir="$distDir" $msStoreWxsPath -arch $wixArch
+          light -spdb -ext WixUIExtension ImageMergeGUI.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMergeGUI-windows-$archLabel-msstore.msi
 
           if (Test-Path "cab1.cab") { Remove-Item "cab1.cab" -Force }
           Get-ChildItem -Path . -Filter "*.wixpdb" -ErrorAction SilentlyContinue | Remove-Item -Force
