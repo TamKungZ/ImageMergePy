@@ -23,7 +23,7 @@ jobs:
       matrix:
         # Pin Linux runner to Ubuntu 22.04 so AppImage/.deb/.rpm are built
         # against glibc 2.35 instead of newer glibc from ubuntu-latest.
-        os: [windows-latest, ubuntu-22.04, macos-13, macos-latest]
+        os: [windows-latest, ubuntu-22.04, macos-15-intel, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -295,8 +295,8 @@ jobs:
           mkdir -p flatpak-src flatpak-repo release_assets
           cp -a "$DIST_DIR"/. flatpak-src/
 
-          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak install -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
 
           flatpak-builder --force-clean --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
           flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$VERSION"
@@ -521,13 +521,13 @@ jobs:
             '<?xml version="1.0" encoding="utf-8"?>',
             '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" IgnorableNamespaces="uap desktop">',
             ('  <Identity Name="{0}" Publisher="{1}" Version="{2}" ProcessorArchitecture="{3}" />' -f $env:MSIX_IDENTITY_NAME, $env:MSIX_PUBLISHER, $msixVersion, $msixArch),
-            ('  <Properties><DisplayName>ImageMergeGUI</DisplayName><PublisherDisplayName>{0}</PublisherDisplayName><Description>Open-source image and video merge tool</Description><Logo>Assets\\StoreLogo.png</Logo></Properties>' -f $env:MSIX_PUBLISHER_DISPLAY_NAME),
+            ('  <Properties><DisplayName>ImageMergeGUI</DisplayName><PublisherDisplayName>{0}</PublisherDisplayName><Description>Open-source image and video merge tool</Description><Logo>Assets/StoreLogo.png</Logo></Properties>' -f $env:MSIX_PUBLISHER_DISPLAY_NAME),
             '  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" /></Dependencies>',
             '  <Resources><Resource Language="en-us" /></Resources>',
             '  <Applications>',
             '    <Application Id="App" Executable="ImageMerge.exe" EntryPoint="Windows.FullTrustApplication">',
-            '      <uap:VisualElements DisplayName="ImageMergeGUI" Description="Open-source image and video merge tool" BackgroundColor="transparent" Square44x44Logo="Assets\\Square44x44Logo.png" Square150x150Logo="Assets\\Square150x150Logo.png">',
-            '        <uap:DefaultTile Wide310x150Logo="Assets\\Square150x150Logo.png" Square310x310Logo="Assets\\Square150x150Logo.png" />',
+            '      <uap:VisualElements DisplayName="ImageMergeGUI" Description="Open-source image and video merge tool" BackgroundColor="transparent" Square44x44Logo="Assets/Square44x44Logo.png" Square150x150Logo="Assets/Square150x150Logo.png">',
+            '        <uap:DefaultTile Wide310x150Logo="Assets/Square150x150Logo.png" Square310x310Logo="Assets/Square150x150Logo.png" />',
             '      </uap:VisualElements>',
             '      <Extensions><desktop:Extension Category="windows.fullTrustProcess" Executable="ImageMerge.exe" /></Extensions>',
             '    </Application>',
