@@ -1,0 +1,93 @@
+name: Publish Snap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v1.0.3)
+        required: true
+        type: string
+      channel:
+        description: Snap channel (stable/candidate/beta/edge)
+        required: false
+        default: stable
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish-snap:
+    name: Upload Snap to Store
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    steps:
+      - name: Resolve release tag and channel
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG" ]; then TAG="${{ inputs.tag }}"; fi
+          if [ -z "$TAG" ]; then
+            echo "Missing release tag"
+            exit 1
+          fi
+
+          CHANNEL="stable"
+          if [ -n "${{ inputs.channel }}" ]; then CHANNEL="${{ inputs.channel }}"; fi
+          case "$CHANNEL" in
+            stable|candidate|beta|edge) ;;
+            *)
+              echo "Invalid channel: $CHANNEL"
+              echo "Allowed values: stable, candidate, beta, edge"
+              exit 1
+              ;;
+          esac
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Snap Store credentials
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}" ]; then
+            echo "Missing secret: SNAPCRAFT_STORE_CREDENTIALS"
+            echo "Create credentials with: snapcraft export-login ..."
+            exit 1
+          fi
+
+      - name: Resolve snap asset URL
+        id: asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          SNAP_URL="$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" --jq '[.assets[] | select(.name | endswith(".snap"))][0].browser_download_url')"
+          SNAP_NAME="$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" --jq '[.assets[] | select(.name | endswith(".snap"))][0].name')"
+
+          if [ -z "$SNAP_URL" ] || [ -z "$SNAP_NAME" ] || [ "$SNAP_URL" = "null" ] || [ "$SNAP_NAME" = "null" ]; then
+            echo "No .snap release asset found for tag ${TAG}"
+            exit 1
+          fi
+
+          echo "url=$SNAP_URL" >> "$GITHUB_OUTPUT"
+          echo "name=$SNAP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Download snap asset
+        shell: bash
+        run: |
+          curl -L "${{ steps.asset.outputs.url }}" -o "${{ steps.asset.outputs.name }}"
+
+      - name: Publish to Snap Store
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.asset.outputs.name }}
+          release: ${{ steps.meta.outputs.channel }}
