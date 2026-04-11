@@ -1,0 +1,194 @@
+name: Publish Flathub PR
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v1.0.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FLATPAK_APP_ID: me.tamkungz.ImageMerge
+
+jobs:
+  flathub-pr:
+    name: Create/Update Flathub PR
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    steps:
+      - name: Resolve release tag
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG" ]; then TAG="${{ inputs.tag }}"; fi
+          if [ -z "$TAG" ]; then
+            echo "Missing release tag"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          if [ -z "$VERSION" ]; then
+            echo "Invalid version from tag: $TAG"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Flathub target
+        id: target
+        shell: bash
+        run: |
+          TARGET_REPO="${{ vars.FLATHUB_TARGET_REPO }}"
+          if [ -z "$TARGET_REPO" ]; then
+            TARGET_REPO="${{ github.repository_owner }}/flathub"
+          fi
+
+          BASE_REPO="${{ vars.FLATHUB_BASE_REPO }}"
+          if [ -z "$BASE_REPO" ]; then
+            BASE_REPO="flathub/flathub"
+          fi
+
+          TARGET_OWNER="${TARGET_REPO%%/*}"
+
+          echo "target_repo=$TARGET_REPO" >> "$GITHUB_OUTPUT"
+          echo "base_repo=$BASE_REPO" >> "$GITHUB_OUTPUT"
+          echo "target_owner=$TARGET_OWNER" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Flathub token
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.FLATHUB_GITHUB_TOKEN }}" ]; then
+            echo "Missing secret: FLATHUB_GITHUB_TOKEN"
+            echo "Required for pushing branch to ${{ steps.target.outputs.target_repo }} and opening PR to flathub."
+            exit 1
+          fi
+
+      - name: Checkout source repository
+        uses: actions/checkout@v5
+
+      - name: Build source URL and checksum
+        id: source
+        shell: bash
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          SRC_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+
+          curl -L "$SRC_URL" -o source.tar.gz
+          SRC_SHA256="$(sha256sum source.tar.gz | cut -d' ' -f1)"
+
+          echo "url=$SRC_URL" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SRC_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Flathub manifest for release
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          manifest_path = Path('packaging/flathub/me.tamkungz.ImageMerge.yml')
+          text = manifest_path.read_text(encoding='utf-8')
+
+          source_url = "${{ steps.source.outputs.url }}"
+          source_sha = "${{ steps.source.outputs.sha256 }}"
+
+          text = re.sub(r'(?m)^\s*url:\s*https://github.com/.+?/archive/refs/tags/.+?\.tar\.gz\s*$', f'        url: {source_url}', text)
+          text = re.sub(r'(?m)^\s*sha256:\s*[0-9a-f]{64}\s*$', f'        sha256: {source_sha}', text)
+
+          out_path = Path('me.tamkungz.ImageMerge.yml')
+          out_path.write_text(text, encoding='utf-8')
+          print(f'Wrote {out_path}')
+          PY
+
+      - name: Validate target and base repositories exist
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
+        run: |
+          TARGET_REPO="${{ steps.target.outputs.target_repo }}"
+          BASE_REPO="${{ steps.target.outputs.base_repo }}"
+
+          gh api "repos/${TARGET_REPO}" >/dev/null
+          gh api "repos/${BASE_REPO}" >/dev/null
+
+      - name: Resolve base default branch
+        id: basemeta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
+        run: |
+          BASE_REPO="${{ steps.target.outputs.base_repo }}"
+          DEFAULT_BRANCH="$(gh api "repos/${BASE_REPO}" --jq '.default_branch')"
+          if [ -z "$DEFAULT_BRANCH" ] || [ "$DEFAULT_BRANCH" = "null" ]; then
+            echo "Unable to resolve default branch for ${BASE_REPO}"
+            exit 1
+          fi
+          echo "default_branch=$DEFAULT_BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Flathub fork
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ steps.target.outputs.target_repo }}
+          token: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
+          ref: ${{ steps.basemeta.outputs.default_branch }}
+          path: flathub
+
+      - name: Commit manifest update
+        id: commit
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          BRANCH="chore/flathub-${{ env.FLATPAK_APP_ID }}-${VERSION}-${{ github.run_id }}"
+
+          cp me.tamkungz.ImageMerge.yml flathub/me.tamkungz.ImageMerge.yml
+
+          git -C flathub config user.name "github-actions[bot]"
+          git -C flathub config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C flathub checkout -b "$BRANCH"
+          git -C flathub add me.tamkungz.ImageMerge.yml
+
+          if git -C flathub diff --cached --quiet; then
+            echo "No Flathub manifest changes to commit"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git -C flathub commit -m "${{ env.FLATPAK_APP_ID }}: update to ${VERSION}"
+          git -C flathub push -u origin "$BRANCH"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update Flathub PR
+        if: steps.commit.outputs.changed == 'true'
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          BASE_REPO="${{ steps.target.outputs.base_repo }}"
+          TARGET_OWNER="${{ steps.target.outputs.target_owner }}"
+          BRANCH="${{ steps.commit.outputs.branch }}"
+
+          PR_URL="$(gh pr create \
+            --repo "$BASE_REPO" \
+            --head "${TARGET_OWNER}:${BRANCH}" \
+            --base "${{ steps.basemeta.outputs.default_branch }}" \
+            --title "${{ env.FLATPAK_APP_ID }}: update to ${VERSION}" \
+            --body "Automated Flathub manifest update for release ${VERSION}.\n\n- App ID: ${{ env.FLATPAK_APP_ID }}\n- Source: ${{ steps.source.outputs.url }}\n- SHA256: ${{ steps.source.outputs.sha256 }}")"
+
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Print PR URL
+        if: steps.commit.outputs.changed == 'true'
+        shell: bash
+        run: |
+          echo "Flathub PR: ${{ steps.pr.outputs.url }}"
