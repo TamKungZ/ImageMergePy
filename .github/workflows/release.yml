@@ -291,9 +291,9 @@ jobs:
             *) ARCH_LABEL="x64" ;;
           esac
 
-          rm -rf flatpak-src flatpak-build-dir flatpak-repo
-          mkdir -p flatpak-src flatpak-repo release_assets
-          cp -a "$DIST_DIR"/. flatpak-src/
+          rm -rf packaging/flatpak/flatpak-src flatpak-build-dir flatpak-repo
+          mkdir -p packaging/flatpak/flatpak-src flatpak-repo release_assets
+          cp -a "$DIST_DIR"/. packaging/flatpak/flatpak-src/
 
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
@@ -519,7 +519,7 @@ jobs:
 
           $manifest = @(
             '<?xml version="1.0" encoding="utf-8"?>',
-            '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" IgnorableNamespaces="uap desktop">',
+            '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap desktop rescap">',
             ('  <Identity Name="{0}" Publisher="{1}" Version="{2}" ProcessorArchitecture="{3}" />' -f $env:MSIX_IDENTITY_NAME, $env:MSIX_PUBLISHER, $msixVersion, $msixArch),
             ('  <Properties><DisplayName>ImageMergeGUI</DisplayName><PublisherDisplayName>{0}</PublisherDisplayName><Description>Open-source image and video merge tool</Description><Logo>Assets/StoreLogo.png</Logo></Properties>' -f $env:MSIX_PUBLISHER_DISPLAY_NAME),
             '  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" /></Dependencies>',
@@ -532,7 +532,7 @@ jobs:
             '      <Extensions><desktop:Extension Category="windows.fullTrustProcess" Executable="ImageMerge.exe" /></Extensions>',
             '    </Application>',
             '  </Applications>',
-            '  <Capabilities><Capability Name="runFullTrust" /></Capabilities>',
+            '  <Capabilities><rescap:Capability Name="runFullTrust" /></Capabilities>',
             '</Package>'
           ) -join "`n"
 
