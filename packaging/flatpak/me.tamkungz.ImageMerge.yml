@@ -22,8 +22,8 @@ modules:
       - type: dir
         path: flatpak-src
       - type: file
-        path: packaging/flatpak/me.tamkungz.ImageMerge.desktop
+        path: me.tamkungz.ImageMerge.desktop
       - type: file
-        path: packaging/flatpak/me.tamkungz.ImageMerge.metainfo.xml
+        path: me.tamkungz.ImageMerge.metainfo.xml
       - type: file
-        path: packaging/flatpak/me.tamkungz.ImageMerge.svg
+        path: me.tamkungz.ImageMerge.svg
