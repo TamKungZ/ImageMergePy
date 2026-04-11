@@ -20,6 +20,7 @@ Release focused on distribution expansion, installer coverage, and store automat
 - Redesigned About dialog to a cleaner scrollable layout for better readability
 - Fixed About version display in packaged builds by including `app_metadata.json` in Nuitka build outputs
 - Added a dedicated Microsoft Store-oriented Windows MSI variant with product name `ImageMergeGUI` (`ImageMergeGUI-windows-<arch>-msstore.msi`)
+- Added automated Windows MSIX packaging + signing in release workflow for Microsoft Store submission (`ImageMergeGUI-windows-<arch>.msix`)
 
 ### Packaging / Distribution Notes
 - Release workflow now builds additional Linux artifacts and uploads them to GitHub Release automatically

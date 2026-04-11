@@ -35,3 +35,4 @@ Thumbs.db
 *.pfx
 *.p12
 *.pem
+imagemerge-msix.pfx.base64

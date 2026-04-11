@@ -10,6 +10,9 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  MSIX_IDENTITY_NAME: "TamKungZ.ImageMergeGUI"
+  MSIX_PUBLISHER: "CN=88710965-E667-4A2A-A501-921090393503"
+  MSIX_PUBLISHER_DISPLAY_NAME: "TamKungZ_"
 
 jobs:
   build:
@@ -264,6 +267,9 @@ jobs:
       - name: Build Windows installer (.msi)
         if: runner.os == 'Windows'
         shell: powershell
+        env:
+          MSIX_PFX_BASE64: ${{ secrets.MSIX_PFX_BASE64 }}
+          MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
         run: |
           $distCandidates = @(
             "dist/windows/MainApp.dist",
@@ -375,6 +381,107 @@ jobs:
 
           candle -dSourceDir="$distDir" $msStoreWxsPath -arch $wixArch
           light -spdb -ext WixUIExtension ImageMergeGUI.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMergeGUI-windows-$archLabel-msstore.msi
+
+          $iconSource = "assets/imagemerge-icon-1024.png"
+          if (-not (Test-Path $iconSource)) { throw "Missing icon source for MSIX: $iconSource" }
+
+          $msixRoot = "msix_root"
+          if (Test-Path $msixRoot) { Remove-Item $msixRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $msixRoot | Out-Null
+
+          Copy-Item -Path (Join-Path $distDir "*") -Destination $msixRoot -Recurse -Force
+
+          $assetsDir = Join-Path $msixRoot "Assets"
+          New-Item -ItemType Directory -Force -Path $assetsDir | Out-Null
+
+          Add-Type -AssemblyName System.Drawing
+          function Write-ResizedPng {
+            param(
+              [string]$InputPath,
+              [string]$OutputPath,
+              [int]$Width,
+              [int]$Height
+            )
+
+            $img = [System.Drawing.Image]::FromFile($InputPath)
+            $bmp = New-Object System.Drawing.Bitmap($Width, $Height)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+            $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+            $g.Clear([System.Drawing.Color]::Transparent)
+            $g.DrawImage($img, 0, 0, $Width, $Height)
+            $bmp.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose(); $img.Dispose()
+          }
+
+          Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "Square44x44Logo.png") -Width 44 -Height 44
+          Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "Square150x150Logo.png") -Width 150 -Height 150
+          Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "StoreLogo.png") -Width 50 -Height 50
+
+          $versionParts4 = $productVersionRaw.Split('.')
+          while ($versionParts4.Count -lt 4) { $versionParts4 += "0" }
+          $msixVersion = "$($versionParts4[0]).$($versionParts4[1]).$($versionParts4[2]).$($versionParts4[3])"
+
+          $msixArch = switch ($archLabel) {
+            "x86" { "x86" }
+            "arm64" { "arm64" }
+            default { "x64" }
+          }
+
+          $manifest = @(
+            '<?xml version="1.0" encoding="utf-8"?>',
+            '<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" IgnorableNamespaces="uap desktop">',
+            ('  <Identity Name="{0}" Publisher="{1}" Version="{2}" ProcessorArchitecture="{3}" />' -f $env:MSIX_IDENTITY_NAME, $env:MSIX_PUBLISHER, $msixVersion, $msixArch),
+            ('  <Properties><DisplayName>ImageMergeGUI</DisplayName><PublisherDisplayName>{0}</PublisherDisplayName><Description>Open-source image and video merge tool</Description><Logo>Assets\\StoreLogo.png</Logo></Properties>' -f $env:MSIX_PUBLISHER_DISPLAY_NAME),
+            '  <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" /></Dependencies>',
+            '  <Resources><Resource Language="en-us" /></Resources>',
+            '  <Applications>',
+            '    <Application Id="App" Executable="ImageMerge.exe" EntryPoint="Windows.FullTrustApplication">',
+            '      <uap:VisualElements DisplayName="ImageMergeGUI" Description="Open-source image and video merge tool" BackgroundColor="transparent" Square44x44Logo="Assets\\Square44x44Logo.png" Square150x150Logo="Assets\\Square150x150Logo.png">',
+            '        <uap:DefaultTile Wide310x150Logo="Assets\\Square150x150Logo.png" Square310x310Logo="Assets\\Square150x150Logo.png" />',
+            '      </uap:VisualElements>',
+            '      <Extensions><desktop:Extension Category="windows.fullTrustProcess" Executable="ImageMerge.exe" /></Extensions>',
+            '    </Application>',
+            '  </Applications>',
+            '  <Capabilities><Capability Name="runFullTrust" /></Capabilities>',
+            '</Package>'
+          ) -join "`n"
+
+          Set-Content -Path (Join-Path $msixRoot "AppxManifest.xml") -Value $manifest -Encoding UTF8
+
+          $makeappx = (Get-Command makeappx.exe -ErrorAction SilentlyContinue).Source
+          if (-not $makeappx) {
+            $makeappx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Filter makeappx.exe -Recurse -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $makeappx) { throw "makeappx.exe not found" }
+
+          $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+          if (-not $signtool) {
+            $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $signtool) { throw "signtool.exe not found" }
+
+          $msixOutput = "release_assets\ImageMergeGUI-windows-$archLabel.msix"
+          & $makeappx pack /d $msixRoot /p $msixOutput /o
+          if ($LASTEXITCODE -ne 0) { throw "makeappx failed" }
+
+          if ([string]::IsNullOrWhiteSpace($env:MSIX_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:MSIX_PFX_PASSWORD)) {
+            throw "Missing MSIX signing secrets: MSIX_PFX_BASE64 / MSIX_PFX_PASSWORD"
+          }
+
+          $pfxPath = "msix-signing.pfx"
+          [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
+
+          & $signtool sign /fd SHA256 /f $pfxPath /p $env:MSIX_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $msixOutput
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed for MSIX" }
+
+          Remove-Item $pfxPath -Force
 
           if (Test-Path "cab1.cab") { Remove-Item "cab1.cab" -Force }
           Get-ChildItem -Path . -Filter "*.wixpdb" -ErrorAction SilentlyContinue | Remove-Item -Force
