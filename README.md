@@ -21,11 +21,54 @@ A GUI tool to merge images/videos from multiple folders, remove duplicates with 
 - Python 3.10+ (recommended)
 - OS-specific native builds are supported on Windows, Linux, and macOS
 
-## Install
+## Install (source)
 
 ```bash
 pip install -r requirements.txt
 ```
+
+## Install (packaged)
+
+Prebuilt packages are published in GitHub Releases:
+
+- Release page: `https://github.com/TamKungZ/ImageMergePy/releases`
+
+### Windows
+
+- Download and run `ImageMerge-windows-x64.msi`
+- Or portable folder: extract `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
+- Microsoft Store submission asset is also generated as `ImageMergeGUI-windows-x64.msix`
+- WinGet automation is configured for package id `TamKungZ.ImageMerge`
+
+### Linux
+
+- Debian/Ubuntu/Zorin: install `ImageMerge-linux-x64.deb`
+
+```bash
+sudo apt install ./ImageMerge-linux-x64.deb
+```
+
+- Fedora/RHEL/openSUSE: install `ImageMerge-linux-x64.rpm`
+
+```bash
+sudo rpm -Uvh ./ImageMerge-linux-x64.rpm
+```
+
+- AppImage: download `ImageMerge-linux-x64.AppImage`
+
+```bash
+chmod +x ImageMerge-linux-x64.AppImage
+./ImageMerge-linux-x64.AppImage
+```
+
+- Flatpak bundle: `ImageMerge-linux-x64.flatpak`
+- Snap artifact: `ImageMerge-linux-x64.snap` (store publishing workflow is configured)
+
+### macOS
+
+- App bundle zip: `ImageMerge-macos-app-arm64.zip` or `ImageMerge-macos-app-x64.zip`
+- Binary zip: `ImageMerge-macos-binary-arm64.zip` or `ImageMerge-macos-binary-x64.zip`
+- Homebrew cask publishing workflow is configured (`imagemerge`)
 
 ## Run (source)
 
