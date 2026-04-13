@@ -58,6 +58,42 @@ jobs:
         run: |
           Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile "wingetcreate.exe"
 
+      - name: Sync winget-pkgs fork
+        shell: powershell
+        env:
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:WINGET_GITHUB_TOKEN)) {
+            throw "Missing secret: WINGET_GITHUB_TOKEN"
+          }
+
+          $env:GH_TOKEN = $env:WINGET_GITHUB_TOKEN
+          $owner = (gh api user --jq .login).Trim()
+          if ([string]::IsNullOrWhiteSpace($owner)) {
+            throw "Unable to resolve GitHub login for WINGET_GITHUB_TOKEN"
+          }
+
+          $upstreamDefaultBranch = (gh api repos/microsoft/winget-pkgs --jq .default_branch).Trim()
+          if ([string]::IsNullOrWhiteSpace($upstreamDefaultBranch)) {
+            throw "Unable to resolve microsoft/winget-pkgs default branch"
+          }
+
+          $forkExists = $true
+          try {
+            gh api "repos/$owner/winget-pkgs" | Out-Null
+          } catch {
+            $forkExists = $false
+          }
+
+          if (-not $forkExists) {
+            gh api -X POST "repos/microsoft/winget-pkgs/forks" | Out-Null
+            Start-Sleep -Seconds 5
+          }
+
+          gh api -X POST "repos/$owner/winget-pkgs/merge-upstream" -f branch="$upstreamDefaultBranch" | Out-Null
+
       - name: Submit WinGet manifest update
         shell: powershell
         env:
