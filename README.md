@@ -35,6 +35,13 @@ Prebuilt packages are published in GitHub Releases:
 
 ### Windows
 
+- Microsoft Store: `https://apps.microsoft.com/detail/9ndnkpjpzt67`
+- WinGet:
+
+```powershell
+winget install TamKungZ.ImageMerge
+```
+
 - Download and run `ImageMerge-windows-x64.msi`
 - Or portable folder: extract `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
 - Microsoft Store submission asset is also generated as `ImageMergeGUI-windows-x64.msix`
@@ -209,3 +216,5 @@ For better SmartScreen reputation in production:
 <p align="center">
   <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-icon.png" alt="ImageMerge Icon" width="20%" />
 </p>
+
+*By TamKungZ_*

@@ -413,6 +413,29 @@ jobs:
           }
           if (-not $distDir) { throw "Missing Windows dist folder (MainApp.dist/ImageMerge.dist)" }
 
+          if ([string]::IsNullOrWhiteSpace($env:MSIX_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:MSIX_PFX_PASSWORD)) {
+            throw "Missing signing secrets: MSIX_PFX_BASE64 / MSIX_PFX_PASSWORD"
+          }
+
+          $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+          if (-not $signtool) {
+            $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $signtool) { throw "signtool.exe not found" }
+
+          $pfxPath = "msix-signing.pfx"
+          [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
+
+          function Sign-ReleaseFile {
+            param([string]$Path)
+
+            if (-not (Test-Path $Path)) { throw "File for signing not found: $Path" }
+            & $signtool sign /fd SHA256 /f $pfxPath /p $env:MSIX_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $Path
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed: $Path" }
+          }
+
           if (-not (Test-Path "app_metadata.json")) { throw "Missing app_metadata.json" }
           $meta = Get-Content "app_metadata.json" -Raw | ConvertFrom-Json
           $productVersionRaw = [string]$meta.product_version
@@ -433,6 +456,9 @@ jobs:
             default { "x64" }
           }
           $programFilesDirId = if ($archLabel -eq "x86") { "ProgramFilesFolder" } else { "ProgramFiles64Folder" }
+
+          $mainExePath = Join-Path $distDir "ImageMerge.exe"
+          Sign-ReleaseFile -Path $mainExePath
 
           New-Item -ItemType Directory -Force -Path installer | Out-Null
           New-Item -ItemType Directory -Force -Path release_assets | Out-Null
@@ -507,12 +533,17 @@ jobs:
 
           $wixArch = if ($archLabel -eq "x86") { "x86" } else { "x64" }
 
+          $standardMsiOutput = "release_assets\ImageMerge-windows-$archLabel.msi"
+          $msStoreMsiOutput = "release_assets\ImageMergeGUI-windows-$archLabel-msstore.msi"
+
           candle -dSourceDir="$distDir" installer\ImageMergeFiles.wxs -arch $wixArch
           candle -dSourceDir="$distDir" $standardWxsPath -arch $wixArch
-          light -spdb -ext WixUIExtension ImageMerge.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMerge-windows-$archLabel.msi
+          light -spdb -ext WixUIExtension ImageMerge.wixobj ImageMergeFiles.wixobj -o $standardMsiOutput
+          Sign-ReleaseFile -Path $standardMsiOutput
 
           candle -dSourceDir="$distDir" $msStoreWxsPath -arch $wixArch
-          light -spdb -ext WixUIExtension ImageMergeGUI.wixobj ImageMergeFiles.wixobj -o release_assets\ImageMergeGUI-windows-$archLabel-msstore.msi
+          light -spdb -ext WixUIExtension ImageMergeGUI.wixobj ImageMergeFiles.wixobj -o $msStoreMsiOutput
+          Sign-ReleaseFile -Path $msStoreMsiOutput
 
           $iconSource = "assets/imagemerge-icon-1024.png"
           if (-not (Test-Path $iconSource)) { throw "Missing icon source for MSIX: $iconSource" }
@@ -591,27 +622,11 @@ jobs:
           }
           if (-not $makeappx) { throw "makeappx.exe not found" }
 
-          $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
-          if (-not $signtool) {
-            $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
-              Sort-Object FullName -Descending |
-              Select-Object -First 1 -ExpandProperty FullName
-          }
-          if (-not $signtool) { throw "signtool.exe not found" }
-
           $msixOutput = "release_assets\ImageMergeGUI-windows-$archLabel.msix"
           & $makeappx pack /d $msixRoot /p $msixOutput /o
           if ($LASTEXITCODE -ne 0) { throw "makeappx failed" }
 
-          if ([string]::IsNullOrWhiteSpace($env:MSIX_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:MSIX_PFX_PASSWORD)) {
-            throw "Missing MSIX signing secrets: MSIX_PFX_BASE64 / MSIX_PFX_PASSWORD"
-          }
-
-          $pfxPath = "msix-signing.pfx"
-          [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
-
-          & $signtool sign /fd SHA256 /f $pfxPath /p $env:MSIX_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $msixOutput
-          if ($LASTEXITCODE -ne 0) { throw "signtool failed for MSIX" }
+          Sign-ReleaseFile -Path $msixOutput
 
           Remove-Item $pfxPath -Force
 
@@ -725,6 +740,40 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: release_files
+
+      - name: Generate SHA256 checksums (Linux)
+        shell: bash
+        run: |
+          cd release_files
+          sha256sum ImageMerge-linux-* > SHA256SUMS
+
+      - name: Import GPG key
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Sign SHA256SUMS with GPG
+        shell: bash
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          cd release_files
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "$GPG_PASSPHRASE" \
+            --local-user "$GPG_KEY_ID" \
+            --armor --detach-sign \
+            --output SHA256SUMS.asc \
+            SHA256SUMS
+
+      - name: Export public GPG key
+        shell: bash
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          gpg --batch --yes --armor --export "$GPG_KEY_ID" > release_files/GPG-KEY.asc
 
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v2
