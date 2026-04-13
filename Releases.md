@@ -1,3 +1,32 @@
+Tag: v1.0.4
+Release title: v1.0.4 - Main Folder Mode + In-Place Reindex
+Release notes:
+## ImageMerge v1.0.4
+
+Update focused on adding a workflow for organizing files directly inside the target folder.
+
+### Highlights
+- Added new **Main folder mode** (`main_folder`) for in-place organization on the output folder
+- Main folder mode now treats the output folder as the primary source and can merge additional input folders into it
+- Improved reindex behavior so filenames are reorganized into a continuous sequence after processing
+- Existing files already named by ImageMerge pattern (for example `0001.png`) are preserved in ordering logic
+- New/mixed filename patterns are still handled by existing sort logic and merged into final sequence
+- CLI now supports `--mode main_folder`, and this mode can run without `--input`
+- Added UI and localization labels/descriptions for the new mode (EN/TH)
+
+### License
+This project remains open-source under the **MIT License**.
+
+
+### What's New (Microsoft Store Update)
+- Added a dedicated **Main Folder page** to separate organizer workflow from merge workflow
+- Added optional **Import folders** section inside Main Folder page for selecting extra folders to merge in
+- Organizer now processes in this order: organize existing files in main folder first, then merge imports, then re-index final output
+- Expanded localization coverage for the new UI keys across all supported languages
+- Updated UI theme and button contrast for clearer visibility in grayscale styling
+
+---
+
 Tag: v1.0.3
 Release title: v1.0.3 - Multi-Channel Packaging + Store Automation
 Release notes:

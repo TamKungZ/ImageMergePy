@@ -73,6 +73,11 @@ chmod +x ImageMerge-linux-x64.AppImage
 
 ### macOS
 
+```bash
+brew tap TamKungZ/tap
+brew install --cask imagemerge
+```
+
 - App bundle zip: `ImageMerge-macos-app-arm64.zip` or `ImageMerge-macos-app-x64.zip`
 - Binary zip: `ImageMerge-macos-binary-arm64.zip` or `ImageMerge-macos-binary-x64.zip`
 - Homebrew cask publishing workflow is configured (`imagemerge`)

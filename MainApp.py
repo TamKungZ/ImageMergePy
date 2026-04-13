@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -71,6 +72,10 @@ MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS
 MODE_MOVE = "move"
 MODE_COPY_DELETE = "copy_delete"
 MODE_COPY_KEEP = "copy_keep"
+MODE_MAIN_FOLDER = "main_folder"
+
+WORKFLOW_MERGE = "merge"
+WORKFLOW_MAIN_FOLDER = "main_folder"
 
 DEFAULT_LANG = "en"
 LOCALES_DIR = APP_DIR / "locales"
@@ -96,20 +101,20 @@ HEX_HASH_RE = re.compile(r"^[0-9a-fA-F]{24,}(?: \(\d+\))?$")
 IMG_NUMBER_RE = re.compile(r"^(IMG)[ _-]?(\d+)(?:\s*\(\d+\))?$", re.IGNORECASE)
 PREFIX_ALLOWED_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 
-C_BG        = "#f4f6fb"
+C_BG        = "#efefef"
 C_SURFACE   = "#ffffff"
-C_SURFACE2  = "#f7f9fd"
-C_SURFACE3  = "#e8eef8"
-C_BORDER    = "rgba(39,61,97,0.12)"
-C_BORDER2   = "rgba(39,61,97,0.22)"
-C_ACCENT    = "#2f6fed"
-C_ACCENT_DIM= "rgba(47,111,237,0.12)"
-C_TEXT      = "#1f2a3d"
-C_TEXT2     = "#4a5a76"
-C_TEXT3     = "#6f7f99"
-C_SUCCESS   = "#1ca46f"
-C_WARNING   = "#bc8500"
-C_DANGER    = "#d54949"
+C_SURFACE2  = "#f4f4f4"
+C_SURFACE3  = "#e4e4e4"
+C_BORDER    = "rgba(20,20,20,0.12)"
+C_BORDER2   = "rgba(20,20,20,0.22)"
+C_ACCENT    = "#111111"
+C_ACCENT_DIM= "rgba(17,17,17,0.12)"
+C_TEXT      = "#111111"
+C_TEXT2     = "#222222"
+C_TEXT3     = "#444444"
+C_SUCCESS   = "#1b1b1b"
+C_WARNING   = "#4f4f4f"
+C_DANGER    = "#2b2b2b"
 
 LANGUAGE_NATIVE_NAMES = {
     "ar": "العربية",
@@ -401,11 +406,11 @@ def process_media(
     logger: Logger,
     tr=t_identity,
 ):
-    if not input_dir_configs:
+    if not input_dir_configs and mode != MODE_MAIN_FOLDER:
         raise ValueError(tr("error_no_input"))
 
     input_paths = [config["path"] for config in input_dir_configs]
-    if output_dir in input_paths:
+    if mode != MODE_MAIN_FOLDER and output_dir in input_paths:
         raise ValueError(tr("error_output_same_as_input"))
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -413,7 +418,21 @@ def process_media(
     logger.write(tr("log_start"))
     logger.write(tr("log_mode", mode=mode))
     logger.write(tr("log_output_dir", output=output_dir))
-    for config in input_dir_configs:
+    source_scan_configs: list[dict] = []
+    if mode == MODE_MAIN_FOLDER:
+        seen_paths: set[Path] = set()
+        source_scan_configs.append({"path": output_dir, "prefix": ""})
+        seen_paths.add(output_dir)
+        for config in input_dir_configs:
+            scan_path = config["path"]
+            if scan_path in seen_paths:
+                continue
+            source_scan_configs.append({"path": scan_path, "prefix": config.get("prefix", "")})
+            seen_paths.add(scan_path)
+    else:
+        source_scan_configs = list(input_dir_configs)
+
+    for config in source_scan_configs:
         logger.write(
             tr(
                 "log_input_entry",
@@ -440,7 +459,7 @@ def process_media(
         except Exception as exc:
             logger.write(tr("log_skip_unreadable_output", path=file_path, error=exc))
 
-    source_items = collect_source_media(input_dir_configs)
+    source_items = collect_source_media(source_scan_configs)
     logger.write(tr("log_found_media", count=len(source_items)))
 
     added = 0
@@ -485,6 +504,10 @@ def process_media(
                 safe_delete_file(file_path, logger, tr)
                 deleted_sources += 1
             elif mode == MODE_COPY_KEEP:
+                shutil.copy2(file_path, dest_path)
+                copied += 1
+                logger.write(tr("log_copied", source=file_path, dest=dest_path.name))
+            elif mode == MODE_MAIN_FOLDER:
                 shutil.copy2(file_path, dest_path)
                 copied += 1
                 logger.write(tr("log_copied", source=file_path, dest=dest_path.name))
@@ -568,7 +591,7 @@ def create_cli_parser() -> argparse.ArgumentParser:
                         help="Input folder entry, repeatable.")
     parser.add_argument("--output", default="", metavar="PATH", help="Output folder path")
     parser.add_argument("--mode", default=MODE_COPY_KEEP,
-                        choices=[MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE], help="Process mode")
+                        choices=[MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE, MODE_MAIN_FOLDER], help="Process mode")
     parser.add_argument("--clear-output", action="store_true",
                         help="Clear media files in output before processing")
     parser.add_argument("--lang", default="", choices=sorted(SUPPORTED_LANGS), help="CLI log language")
@@ -584,7 +607,7 @@ def run_cli(argv: list[str]) -> int:
         parser.print_help()
         return 0
 
-    if not args.input:
+    if not args.input and args.mode != MODE_MAIN_FOLDER:
         parser.error("--input is required in CLI mode")
     if not args.output:
         parser.error("--output is required in CLI mode")
@@ -692,7 +715,7 @@ class SourceRow(QWidget):
         if prefix:
             self.prefix_lbl.setStyleSheet(
                 f"font-size:12px; font-weight:700; color:{C_ACCENT};"
-                f" background:{C_ACCENT_DIM}; border:1px solid rgba(47,111,237,0.35);"
+                f" background:{C_ACCENT_DIM}; border:1px solid rgba(17,17,17,0.35);"
                 f" border-radius:10px; padding:1px 8px;"
             )
         else:
@@ -707,7 +730,7 @@ class SourceRow(QWidget):
         rm_btn.setStyleSheet(
             f"QPushButton {{ background:transparent; border:none; color:{C_TEXT3};"
             f" border-radius:5px; font-size:12px; }}"
-            f"QPushButton:hover {{ background:rgba(240,96,96,0.15); color:{C_DANGER}; }}"
+            f"QPushButton:hover {{ background:rgba(30,30,30,0.12); color:{C_DANGER}; }}"
         )
         rm_btn.clicked.connect(lambda: self.remove_requested.emit(self.path_str))
         lay.addWidget(rm_btn)
@@ -719,11 +742,61 @@ class SourceRow(QWidget):
         if prefix:
             self.prefix_lbl.setStyleSheet(
                 f"font-size:12px; font-weight:700; color:{C_ACCENT};"
-                f" background:{C_ACCENT_DIM}; border:1px solid rgba(47,111,237,0.35);"
+                f" background:{C_ACCENT_DIM}; border:1px solid rgba(17,17,17,0.35);"
                 f" border-radius:10px; padding:1px 8px;"
             )
         else:
             self.prefix_lbl.setStyleSheet(f"font-size:12px; color:{C_TEXT3}; padding:1px 8px;")
+
+    def set_selected(self, selected: bool):
+        self._selected = selected
+        self._refresh_style()
+
+    def _refresh_style(self):
+        if self._selected:
+            self.setStyleSheet(f"background:{C_ACCENT_DIM};")
+        else:
+            self.setStyleSheet("background:transparent;")
+
+    def mouseDoubleClickEvent(self, _event):
+        self.edit_requested.emit(self.path_str)
+
+    def mousePressEvent(self, _event):
+        self.edit_requested.emit(self.path_str)
+
+
+class FolderOnlyRow(QWidget):
+    remove_requested = Signal(str)
+    edit_requested = Signal(str)
+
+    def __init__(self, path: str, parent=None):
+        super().__init__(parent)
+        self.path_str = path
+        self._selected = False
+        self.setFixedHeight(42)
+        self.setCursor(Qt.PointingHandCursor)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(14, 0, 10, 0)
+        lay.setSpacing(10)
+
+        self.path_lbl = QLabel(path)
+        self.path_lbl.setStyleSheet(f"font-size:14px; color:{C_TEXT};")
+        self.path_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        lay.addWidget(self.path_lbl)
+
+        rm_btn = QPushButton("✕")
+        rm_btn.setFixedSize(24, 24)
+        rm_btn.setCursor(Qt.PointingHandCursor)
+        rm_btn.setStyleSheet(
+            f"QPushButton {{ background:transparent; border:none; color:{C_TEXT3};"
+            f" border-radius:5px; font-size:12px; }}"
+            f"QPushButton:hover {{ background:rgba(30,30,30,0.12); color:{C_DANGER}; }}"
+        )
+        rm_btn.clicked.connect(lambda: self.remove_requested.emit(self.path_str))
+        lay.addWidget(rm_btn)
+
+        self._refresh_style()
 
     def set_selected(self, selected: bool):
         self._selected = selected
@@ -779,13 +852,18 @@ class App(QMainWindow):
             self.setWindowIcon(QIcon(str(icon_path)))
 
         self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
-        self.resize(1160, 780)
-        self.setMinimumSize(960, 640)
+        self.resize(1360, 900)
+        self.setMinimumSize(1100, 720)
 
         self.input_entries: list[dict] = []
         self._source_rows: dict[str, SourceRow] = {}
         self._selected_path: str | None = None
+        self.main_input_entries: list[dict] = []
+        self._main_source_rows: dict[str, FolderOnlyRow] = {}
+        self._main_selected_path: str | None = None
         self._current_mode: str = MODE_COPY_KEEP
+        self._current_workflow: str = WORKFLOW_MERGE
+        self._output_path: str = ""
 
         self.is_running = False
         self.worker_thread: QThread | None = None
@@ -814,7 +892,7 @@ class App(QMainWindow):
         palette.setColor(QPalette.Button, QColor(C_SURFACE2))
         palette.setColor(QPalette.ButtonText, text)
         palette.setColor(QPalette.Highlight, accent)
-        palette.setColor(QPalette.HighlightedText, QColor("#0f1728"))
+        palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         palette.setColor(QPalette.PlaceholderText, QColor(C_TEXT3))
         palette.setColor(QPalette.Disabled, QPalette.WindowText, text2)
         palette.setColor(QPalette.Disabled, QPalette.Text, text2)
@@ -896,23 +974,23 @@ class App(QMainWindow):
 
         /* Start button */
         QPushButton#startBtn {{
-            background: {C_ACCENT}; color: #0f1728; border: none;
+            background: {C_ACCENT}; color: #ffffff; border: none;
             border-radius: 10px; font-size: 20px; font-weight: 700; padding: 14px;
         }}
-        QPushButton#startBtn:hover {{ background: #2b62cc; }}
-        QPushButton#startBtn:pressed {{ background: #2356b7; }}
+        QPushButton#startBtn:hover {{ background: #242424; }}
+        QPushButton#startBtn:pressed {{ background: #000000; }}
         QPushButton#startBtn:disabled {{
-            background: #dbe7ff; color: #314666;
+            background: #4a4a4a; color: #f2f2f2; border: 1px solid #4a4a4a;
         }}
 
         /* Secondary buttons */
         QPushButton#primaryBtn {{
-            background-color: {C_ACCENT}; color: #0f1728; border: none;
+            background-color: #1b1b1b; color: #ffffff; border: 1px solid #1b1b1b;
             border-radius: 7px; padding: 8px 14px; font-size: 14px; font-weight: 600;
         }}
-        QPushButton#primaryBtn:hover {{ background-color: #2458bd; }}
-        QPushButton#primaryBtn:pressed {{ background-color: #1f4da6; }}
-        QPushButton#primaryBtn:disabled {{ background-color: #d8e3fb; color: #6f7f99; border-color: {C_BORDER2}; }}
+        QPushButton#primaryBtn:hover {{ background-color: #000000; border-color: #000000; }}
+        QPushButton#primaryBtn:pressed {{ background-color: #343434; border-color: #343434; }}
+        QPushButton#primaryBtn:disabled {{ background-color: #4a4a4a; color: #f2f2f2; border-color: #4a4a4a; }}
 
         QPushButton#ghostBtn {{
             background: {C_SURFACE2}; color: {C_TEXT}; border: 1px solid {C_BORDER2};
@@ -925,7 +1003,7 @@ class App(QMainWindow):
             background: transparent; color: {C_TEXT3}; border: 1px solid {C_BORDER};
             border-radius: 7px; padding: 8px 12px; font-size: 14px;
         }}
-        QPushButton#dangerGhostBtn:hover {{ background: rgba(213,73,73,0.1); color: {C_DANGER}; border-color: rgba(213,73,73,0.35); }}
+        QPushButton#dangerGhostBtn:hover {{ background: rgba(20,20,20,0.08); color: {C_DANGER}; border-color: {C_BORDER2}; }}
         QPushButton#dangerGhostBtn:disabled {{ color: {C_TEXT3}; }}
 
         QPushButton#tinyBtn {{
@@ -933,6 +1011,15 @@ class App(QMainWindow):
             border-radius: 5px; padding: 3px 8px; font-size: 12px;
         }}
         QPushButton#tinyBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
+
+        QPushButton#pageModeBtn {{
+            background: {C_SURFACE2}; color: {C_TEXT2}; border: 1px solid {C_BORDER2};
+            border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 600;
+        }}
+        QPushButton#pageModeBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
+        QPushButton#pageModeBtn[active="true"] {{
+            background: {C_ACCENT_DIM}; color: {C_ACCENT}; border: 1px solid {C_ACCENT};
+        }}
 
         /* Checkbox */
         QCheckBox {{ color: {C_TEXT2}; font-size: 14px; spacing: 8px; }}
@@ -1003,6 +1090,29 @@ class App(QMainWindow):
         splitter.setChildrenCollapsible(False)
         root_lay.addWidget(splitter, 1)
 
+        mode_switch = QWidget()
+        mode_switch.setObjectName("titlebar")
+        mode_switch_lay = QHBoxLayout(mode_switch)
+        mode_switch_lay.setContentsMargins(20, 8, 20, 8)
+        mode_switch_lay.setSpacing(8)
+
+        self.page_btn_merge = QPushButton()
+        self.page_btn_merge.setObjectName("pageModeBtn")
+        self.page_btn_merge.setCursor(Qt.PointingHandCursor)
+        self.page_btn_merge.clicked.connect(lambda: self._set_workflow(WORKFLOW_MERGE))
+        mode_switch_lay.addWidget(self.page_btn_merge)
+
+        self.page_btn_main = QPushButton()
+        self.page_btn_main.setObjectName("pageModeBtn")
+        self.page_btn_main.setCursor(Qt.PointingHandCursor)
+        self.page_btn_main.clicked.connect(lambda: self._set_workflow(WORKFLOW_MAIN_FOLDER))
+        mode_switch_lay.addWidget(self.page_btn_main)
+        mode_switch_lay.addStretch()
+        root_lay.insertWidget(1, mode_switch)
+
+        self.left_page_stack = QStackedWidget()
+        self.left_page_stack.setStyleSheet(f"background:{C_BG};")
+
         left_scroll = QScrollArea()
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -1024,6 +1134,12 @@ class App(QMainWindow):
         self.add_folder_btn.setObjectName("primaryBtn")
         self.add_folder_btn.setCursor(Qt.PointingHandCursor)
         self.add_folder_btn.setEnabled(True)
+        self.add_folder_btn.setStyleSheet(
+            "QPushButton { background:#1b1b1b; color:#ffffff; border:1px solid #1b1b1b; border-radius:7px; padding:8px 14px; font-size:14px; font-weight:600; }"
+            "QPushButton:hover { background:#000000; border-color:#000000; }"
+            "QPushButton:pressed { background:#343434; border-color:#343434; }"
+            "QPushButton:disabled { background:#4a4a4a; color:#f2f2f2; border-color:#4a4a4a; }"
+        )
         self.add_folder_btn.clicked.connect(self.add_input_folder)
 
         self.edit_prefix_btn = QPushButton()
@@ -1075,7 +1191,7 @@ class App(QMainWindow):
             f"font-size:13px; font-weight:600; color:{C_TEXT3}; letter-spacing:0.2px;"
         )
         shb_lay.addWidget(self.col_prefix_lbl)
-        shb_lay.addSpacing(34)  # room for ✕ button
+        shb_lay.addSpacing(34)
 
         src_container_lay.addWidget(src_header_bar)
 
@@ -1100,7 +1216,6 @@ class App(QMainWindow):
 
         self.rows_scroll.setWidget(self.rows_widget)
         src_container_lay.addWidget(self.rows_scroll)
-
         left_lay.addWidget(src_container)
 
         self.output_section_label = _section_label("")
@@ -1145,7 +1260,6 @@ class App(QMainWindow):
         self.mode_note_label.setObjectName("noteLabel")
         self.mode_note_label.setWordWrap(True)
         left_lay.addWidget(self.mode_note_label)
-
         left_lay.addStretch()
 
         footer_lay = QHBoxLayout()
@@ -1160,7 +1274,153 @@ class App(QMainWindow):
         left_lay.addLayout(footer_lay)
 
         left_scroll.setWidget(left_widget)
-        splitter.addWidget(left_scroll)
+        self.left_page_stack.addWidget(left_scroll)
+
+        main_scroll = QScrollArea()
+        main_scroll.setWidgetResizable(True)
+        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        main_scroll.setFrameShape(QFrame.NoFrame)
+        main_scroll.setStyleSheet(f"background:{C_BG};")
+
+        main_widget = QWidget()
+        main_widget.setStyleSheet(f"background:{C_BG};")
+        main_lay = QVBoxLayout(main_widget)
+        main_lay.setContentsMargins(20, 20, 20, 20)
+        main_lay.setSpacing(18)
+
+        self.main_page_title = QLabel()
+        self.main_page_title.setStyleSheet(f"font-size:24px; font-weight:700; color:{C_TEXT};")
+        main_lay.addWidget(self.main_page_title)
+
+        self.main_page_desc = QLabel()
+        self.main_page_desc.setObjectName("noteLabel")
+        self.main_page_desc.setWordWrap(True)
+        main_lay.addWidget(self.main_page_desc)
+
+        self.main_output_section_label = _section_label("")
+        main_lay.addWidget(self.main_output_section_label)
+
+        main_out_row = QHBoxLayout()
+        self.main_output_input = QLineEdit()
+        self.main_output_input.setObjectName("outputPath")
+        self.main_output_input.setReadOnly(True)
+        main_out_row.addWidget(self.main_output_input)
+
+        self.main_output_btn = QPushButton()
+        self.main_output_btn.setObjectName("ghostBtn")
+        self.main_output_btn.setCursor(Qt.PointingHandCursor)
+        self.main_output_btn.clicked.connect(self.choose_main_output_folder)
+        main_out_row.addWidget(self.main_output_btn)
+        main_lay.addLayout(main_out_row)
+
+        self.main_clear_output_checkbox = QCheckBox()
+        main_lay.addWidget(self.main_clear_output_checkbox)
+
+        self.main_sources_hint_label = QLabel()
+        self.main_sources_hint_label.setObjectName("noteLabel")
+        self.main_sources_hint_label.setWordWrap(True)
+        main_lay.addWidget(self.main_sources_hint_label)
+
+        self.main_page_note_label = QLabel()
+        self.main_page_note_label.setObjectName("noteLabel")
+        self.main_page_note_label.setWordWrap(True)
+        main_lay.addWidget(self.main_page_note_label)
+
+        self.main_import_section_label = _section_label("")
+        main_lay.addWidget(self.main_import_section_label)
+
+        main_src_hdr = QHBoxLayout()
+        main_src_hdr.setContentsMargins(0, 0, 0, 0)
+        main_src_hdr.setSpacing(8)
+        main_src_hdr.addStretch()
+
+        self.main_add_folder_btn = QPushButton()
+        self.main_add_folder_btn.setObjectName("primaryBtn")
+        self.main_add_folder_btn.setCursor(Qt.PointingHandCursor)
+        self.main_add_folder_btn.setStyleSheet(
+            "QPushButton { background:#1b1b1b; color:#ffffff; border:1px solid #1b1b1b; border-radius:7px; padding:8px 14px; font-size:14px; font-weight:600; }"
+            "QPushButton:hover { background:#000000; border-color:#000000; }"
+            "QPushButton:pressed { background:#343434; border-color:#343434; }"
+            "QPushButton:disabled { background:#4a4a4a; color:#f2f2f2; border-color:#4a4a4a; }"
+        )
+        self.main_add_folder_btn.clicked.connect(self.add_main_input_folder)
+
+        self.main_remove_btn = QPushButton()
+        self.main_remove_btn.setObjectName("dangerGhostBtn")
+        self.main_remove_btn.setCursor(Qt.PointingHandCursor)
+        self.main_remove_btn.setEnabled(False)
+        self.main_remove_btn.clicked.connect(self.remove_selected_main_input)
+
+        self.main_clear_btn = QPushButton()
+        self.main_clear_btn.setObjectName("dangerGhostBtn")
+        self.main_clear_btn.setCursor(Qt.PointingHandCursor)
+        self.main_clear_btn.clicked.connect(self.clear_main_inputs)
+
+        main_src_hdr.addWidget(self.main_add_folder_btn)
+        main_src_hdr.addWidget(self.main_remove_btn)
+        main_src_hdr.addWidget(self.main_clear_btn)
+        main_lay.addLayout(main_src_hdr)
+
+        self.main_source_container = QWidget()
+        self.main_source_container.setObjectName("sourceContainer")
+        main_source_container_lay = QVBoxLayout(self.main_source_container)
+        main_source_container_lay.setContentsMargins(0, 0, 0, 0)
+        main_source_container_lay.setSpacing(0)
+
+        main_src_header_bar = QWidget()
+        main_src_header_bar.setObjectName("sourceHeaderBar")
+        main_src_header_bar.setFixedHeight(30)
+        main_shb_lay = QHBoxLayout(main_src_header_bar)
+        main_shb_lay.setContentsMargins(14, 0, 10, 0)
+        main_shb_lay.setSpacing(10)
+
+        self.main_col_folder_lbl = QLabel()
+        self.main_col_folder_lbl.setStyleSheet(
+            f"font-size:13px; font-weight:600; color:{C_TEXT3}; letter-spacing:0.2px;"
+        )
+        main_shb_lay.addWidget(self.main_col_folder_lbl, 1)
+        main_shb_lay.addSpacing(34)
+        main_source_container_lay.addWidget(main_src_header_bar)
+
+        self.main_rows_scroll = QScrollArea()
+        self.main_rows_scroll.setWidgetResizable(True)
+        self.main_rows_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_rows_scroll.setFrameShape(QFrame.NoFrame)
+        self.main_rows_scroll.setFixedHeight(160)
+        self.main_rows_scroll.setStyleSheet("background:transparent;")
+
+        self.main_rows_widget = QWidget()
+        self.main_rows_widget.setStyleSheet("background:transparent;")
+        self.main_rows_layout = QVBoxLayout(self.main_rows_widget)
+        self.main_rows_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_rows_layout.setSpacing(0)
+        self.main_rows_layout.setAlignment(Qt.AlignTop)
+
+        self.main_empty_label = QLabel()
+        self.main_empty_label.setAlignment(Qt.AlignCenter)
+        self.main_empty_label.setStyleSheet(f"color:{C_TEXT3}; font-size:14px; padding:28px;")
+        self.main_rows_layout.addWidget(self.main_empty_label)
+
+        self.main_rows_scroll.setWidget(self.main_rows_widget)
+        main_source_container_lay.addWidget(self.main_rows_scroll)
+        main_lay.addWidget(self.main_source_container)
+
+        main_lay.addStretch()
+
+        main_footer_lay = QHBoxLayout()
+        main_footer_lay.setContentsMargins(0, 0, 0, 0)
+        self.info_btn_main = QPushButton("i")
+        self.info_btn_main.setObjectName("infoBtn")
+        self.info_btn_main.setCursor(Qt.PointingHandCursor)
+        self.info_btn_main.clicked.connect(self.show_about_popup)
+        main_footer_lay.addWidget(self.info_btn_main, 0, Qt.AlignLeft | Qt.AlignBottom)
+        main_footer_lay.addStretch()
+        main_lay.addLayout(main_footer_lay)
+
+        main_scroll.setWidget(main_widget)
+        self.left_page_stack.addWidget(main_scroll)
+
+        splitter.addWidget(self.left_page_stack)
 
         right_panel = QWidget()
         right_panel.setObjectName("rightPanel")
@@ -1179,6 +1439,12 @@ class App(QMainWindow):
         self.start_btn = QPushButton()
         self.start_btn.setObjectName("startBtn")
         self.start_btn.setCursor(Qt.PointingHandCursor)
+        self.start_btn.setStyleSheet(
+            "QPushButton { background:#111111; color:#ffffff; border:1px solid #111111; border-radius:10px; font-size:20px; font-weight:700; padding:14px; }"
+            "QPushButton:hover { background:#242424; border-color:#242424; }"
+            "QPushButton:pressed { background:#000000; border-color:#000000; }"
+            "QPushButton:disabled { background:#4a4a4a; color:#f2f2f2; border-color:#4a4a4a; }"
+        )
         self.start_btn.clicked.connect(self.start_process)
         btn_area_lay.addWidget(self.start_btn)
         rp_lay.addWidget(btn_area)
@@ -1237,6 +1503,8 @@ class App(QMainWindow):
         splitter.setSizes([860, 300])
 
         self._retranslate_ui()
+        self._set_output_path("")
+        self._set_workflow(self._current_workflow)
 
         lang_index = self.lang_selector.findData(self.i18n.lang)
         if lang_index >= 0:
@@ -1266,19 +1534,30 @@ class App(QMainWindow):
         self.mode_section_label.setText(self.t("section_mode").upper())
         self.opt_section_label.setText(self.t("section_options").upper())
         self.log_section_label.setText(self.t("section_log").upper())
+        self.main_output_section_label.setText(self.t("main_page_target").upper())
+        self.main_import_section_label.setText(self.t("main_page_import_section").upper())
+
+        self.page_btn_merge.setText(self.t("page_mode_merge"))
+        self.page_btn_main.setText(self.t("page_mode_main_folder"))
 
         self.add_folder_btn.setText("+ " + self.t("btn_add_folder"))
         self.edit_prefix_btn.setText(self.t("btn_edit_prefix"))
         self.remove_btn.setText(self.t("btn_remove_selected"))
         self.clear_btn.setText(self.t("btn_clear_all"))
         self.output_btn.setText(self.t("btn_select_output"))
+        self.main_output_btn.setText(self.t("btn_select_output"))
+        self.main_add_folder_btn.setText("+ " + self.t("btn_add_folder"))
+        self.main_remove_btn.setText(self.t("btn_remove_selected"))
+        self.main_clear_btn.setText(self.t("btn_clear_all"))
         self.start_btn.setText(self.t("btn_start"))
         self._clear_log_btn.setText(self.t("btn_clear_log"))
 
         self.col_folder_lbl.setText(self.t("col_folder"))
         self.col_prefix_lbl.setText(self.t("col_prefix"))
+        self.main_col_folder_lbl.setText(self.t("col_folder"))
 
         self.output_input.setPlaceholderText(self.t("section_output"))
+        self.main_output_input.setPlaceholderText(self.t("main_page_target"))
 
         mode_data = {
             MODE_COPY_KEEP: self.t("mode_copy_keep"),
@@ -1296,8 +1575,13 @@ class App(QMainWindow):
             card.desc_lbl.setText(short_desc[key])
 
         self.clear_output_checkbox.setText(self.t("opt_clear_output"))
+        self.main_clear_output_checkbox.setText(self.t("opt_clear_output"))
         self.mode_note_label.setText(self.t("mode_note"))
+        self.main_page_title.setText(self.t("main_page_title"))
+        self.main_page_desc.setText(self.t("main_page_desc"))
+        self.main_page_note_label.setText(self.t("main_page_note"))
         self.info_btn.setToolTip("About this app")
+        self.info_btn_main.setToolTip("About this app")
 
         self.stat_added.set_label(self.t("stat_added"))
         self.stat_skipped.set_label(self.t("stat_skipped"))
@@ -1305,6 +1589,7 @@ class App(QMainWindow):
         self.stat_failed.set_label(self.t("stat_failed"))
 
         self._refresh_empty_label()
+        self._apply_workflow_button_state()
 
     def _refresh_title_desc(self):
         if not self._title_desc_full:
@@ -1322,6 +1607,15 @@ class App(QMainWindow):
             self.empty_label.show()
         else:
             self.empty_label.hide()
+        self._refresh_main_empty_label()
+        self._refresh_main_sources_hint()
+
+    def _refresh_main_empty_label(self):
+        if not self.main_input_entries:
+            self.main_empty_label.setText(self.t("empty_no_main_source"))
+            self.main_empty_label.show()
+        else:
+            self.main_empty_label.hide()
 
     def _on_lang_selector_changed(self, _index: int):
         lang = self.lang_selector.currentData()
@@ -1346,6 +1640,7 @@ class App(QMainWindow):
                 self.t("mode_copy_keep"),
                 self.t("mode_copy_delete"),
                 self.t("mode_move"),
+                self.t("mode_main_folder"),
             ]
         )
         langs = ", ".join(LANGUAGE_NATIVE_NAMES.get(code, code.upper()) for code in self._lang_codes)
@@ -1425,6 +1720,35 @@ class App(QMainWindow):
 
     def _selected_mode(self) -> str:
         return self._current_mode
+
+    def _apply_workflow_button_state(self):
+        is_merge = self._current_workflow == WORKFLOW_MERGE
+        self.page_btn_merge.setProperty("active", is_merge)
+        self.page_btn_main.setProperty("active", not is_merge)
+        self.page_btn_merge.style().unpolish(self.page_btn_merge)
+        self.page_btn_merge.style().polish(self.page_btn_merge)
+        self.page_btn_main.style().unpolish(self.page_btn_main)
+        self.page_btn_main.style().polish(self.page_btn_main)
+
+    def _set_workflow(self, workflow: str):
+        if workflow not in {WORKFLOW_MERGE, WORKFLOW_MAIN_FOLDER}:
+            workflow = WORKFLOW_MERGE
+        self._current_workflow = workflow
+        self.left_page_stack.setCurrentIndex(0 if workflow == WORKFLOW_MERGE else 1)
+        self._apply_workflow_button_state()
+
+    def _set_output_path(self, path_text: str):
+        self._output_path = path_text.strip()
+        self.output_input.setText(self._output_path)
+        self.main_output_input.setText(self._output_path)
+
+    def _refresh_main_sources_hint(self):
+        if self.main_input_entries:
+            self.main_sources_hint_label.setText(
+                self.t("main_page_sources_hint", count=len(self.main_input_entries))
+            )
+        else:
+            self.main_sources_hint_label.setText(self.t("main_page_no_sources_hint"))
 
     def prompt_prefix(self, initial: str = "") -> str | None:
         value, accepted = QInputDialog.getText(
@@ -1520,10 +1844,83 @@ class App(QMainWindow):
         self._clear_source_rows()
         self._refresh_empty_label()
 
+    def _add_main_source_row(self, path_str: str):
+        row = FolderOnlyRow(path_str)
+        row.remove_requested.connect(self._remove_main_by_path)
+        row.edit_requested.connect(self._select_main_row)
+        self._main_source_rows[path_str] = row
+        self.main_rows_layout.addWidget(row)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background:{C_BORDER}; border:none;")
+        sep.setObjectName(f"main_sep_{path_str}")
+        self.main_rows_layout.addWidget(sep)
+
+    def _clear_main_source_rows(self):
+        while self.main_rows_layout.count():
+            item = self.main_rows_layout.takeAt(0)
+            if item.widget() and item.widget() is not self.main_empty_label:
+                item.widget().deleteLater()
+        self._main_source_rows.clear()
+        self.main_rows_layout.addWidget(self.main_empty_label)
+
+    def _select_main_row(self, path_str: str):
+        if self._main_selected_path == path_str:
+            self._main_selected_path = None
+            if path_str in self._main_source_rows:
+                self._main_source_rows[path_str].set_selected(False)
+        else:
+            if self._main_selected_path and self._main_selected_path in self._main_source_rows:
+                self._main_source_rows[self._main_selected_path].set_selected(False)
+            self._main_selected_path = path_str
+            if path_str in self._main_source_rows:
+                self._main_source_rows[path_str].set_selected(True)
+        self.main_remove_btn.setEnabled(self._main_selected_path is not None)
+
+    def _remove_main_by_path(self, path_str: str):
+        self.main_input_entries = [e for e in self.main_input_entries if str(e["path"]) != path_str]
+        if self._main_selected_path == path_str:
+            self._main_selected_path = None
+            self.main_remove_btn.setEnabled(False)
+        self._clear_main_source_rows()
+        for entry in self.main_input_entries:
+            self._add_main_source_row(str(entry["path"]))
+        self._refresh_empty_label()
+
+    def add_main_input_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, self.t("dlg_select_input"))
+        if not folder:
+            return
+        path = Path(folder).expanduser().resolve()
+        if any(entry["path"] == path for entry in self.main_input_entries):
+            QMessageBox.information(self, self.t("app_title"), self.t("msg_folder_exists"))
+            return
+        entry = {"path": path, "prefix": ""}
+        self.main_input_entries.append(entry)
+        self._add_main_source_row(str(path))
+        self._refresh_empty_label()
+
+    def remove_selected_main_input(self):
+        if self._main_selected_path:
+            self._remove_main_by_path(self._main_selected_path)
+
+    def clear_main_inputs(self):
+        self.main_input_entries.clear()
+        self._main_selected_path = None
+        self.main_remove_btn.setEnabled(False)
+        self._clear_main_source_rows()
+        self._refresh_empty_label()
+
     def choose_output_folder(self):
         folder = QFileDialog.getExistingDirectory(self, self.t("dlg_select_output"))
         if folder:
-            self.output_input.setText(folder)
+            self._set_output_path(folder)
+
+    def choose_main_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, self.t("dlg_select_output"))
+        if folder:
+            self._set_output_path(folder)
 
     def append_log(self, text: str):
         self.log_text.append(text)
@@ -1533,11 +1930,16 @@ class App(QMainWindow):
             return
 
         input_configs = [{"path": e["path"], "prefix": e.get("prefix", "")} for e in self.input_entries]
-        output_dir_text = self.output_input.text().strip()
-        mode = self._selected_mode()
-        clear_output_first = self.clear_output_checkbox.isChecked()
+        output_dir_text = self._output_path
+        if self._current_workflow == WORKFLOW_MAIN_FOLDER:
+            mode = MODE_MAIN_FOLDER
+            clear_output_first = self.main_clear_output_checkbox.isChecked()
+            input_configs = [{"path": e["path"], "prefix": ""} for e in self.main_input_entries]
+        else:
+            mode = self._selected_mode()
+            clear_output_first = self.clear_output_checkbox.isChecked()
 
-        if not input_configs:
+        if self._current_workflow == WORKFLOW_MERGE and not input_configs:
             QMessageBox.warning(self, self.t("app_title"), self.t("msg_need_input"))
             return
         if not output_dir_text:
