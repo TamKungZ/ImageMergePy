@@ -1,3 +1,26 @@
+Tag: v1.0.5
+Release title: v1.0.5 - Inside Organizer + Safe Temp Workspace
+Release notes:
+## ImageMerge v1.0.5
+
+Update focused on expanding organizer workflows, safer processing, and smarter in-place reindex behavior.
+
+### Highlights
+- Added new **Inside organizer mode** (`inside_folder`) for organizing media already inside the selected target folder
+- Added third workflow page in GUI: Merge / Main Folder / Folder Organizer
+- Inside organizer now supports **minimal rename** behavior (keep already-correct sequence names unchanged when possible)
+- Gap-fix behavior improved: if sequence has missing indexes (for example `0003` / `0026` missing), files are shifted and reindexed continuously
+- Added optional **remove duplicates by content** toggle for inside organizer mode (hash + extension)
+- Added optional **Safe temp workspace** toggle (default enabled) for all modes to reduce risk on interruption
+- Safe mode now stages processing under `.imagemerge_temp/session-<id>/` and applies final output at completion
+- Added CLI flags for new behavior: `--mode inside_folder`, `--remove-duplicates`, and `--no-safe-temp`
+- Expanded localization keys for new mode/page/options across supported language files
+
+### License
+This project remains open-source under the **MIT License**.
+
+---
+
 Tag: v1.0.4
 Release title: v1.0.4 - Main Folder Mode + In-Place Reindex
 Release notes:

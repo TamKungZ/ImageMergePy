@@ -73,9 +73,11 @@ MODE_MOVE = "move"
 MODE_COPY_DELETE = "copy_delete"
 MODE_COPY_KEEP = "copy_keep"
 MODE_MAIN_FOLDER = "main_folder"
+MODE_INSIDE_FOLDER = "inside_folder"
 
 WORKFLOW_MERGE = "merge"
 WORKFLOW_MAIN_FOLDER = "main_folder"
+WORKFLOW_INSIDE_FOLDER = "inside_folder"
 
 DEFAULT_LANG = "en"
 LOCALES_DIR = APP_DIR / "locales"
@@ -331,7 +333,12 @@ def iter_media_files(root_dir: Path):
                 yield file_path
 
 
-def organize_output(output_dir: Path, logger: Logger | None = None, tr=t_identity):
+def organize_output(
+    output_dir: Path,
+    logger: Logger | None = None,
+    tr=t_identity,
+    minimal_rename: bool = False,
+):
     media_files = [path for path in output_dir.iterdir() if is_media_file(path)]
 
     image_files = sorted(
@@ -344,19 +351,42 @@ def organize_output(output_dir: Path, logger: Logger | None = None, tr=t_identit
     )
     ordered_files = image_files + video_files
 
-    temp_files: list[tuple[Path, str]] = []
-    for file_path in ordered_files:
-        prefix, _ = split_existing_prefix_and_number(file_path)
-        temp_name = f"__temp__{uuid.uuid4().hex}{file_path.suffix.lower()}"
-        temp_path = output_dir / temp_name
-        file_path.rename(temp_path)
-        temp_files.append((temp_path, prefix))
+    if minimal_rename:
+        planned: list[tuple[Path, Path]] = []
+        final_files: list[Path] = []
+        for index, file_path in enumerate(ordered_files, start=1):
+            prefix, _ = split_existing_prefix_and_number(file_path)
+            desired = output_dir / build_output_name(index, file_path.suffix, prefix)
+            final_files.append(desired)
+            if file_path.name != desired.name:
+                planned.append((file_path, desired))
 
-    renamed_files: list[Path] = []
-    for index, (temp_path, prefix) in enumerate(temp_files, start=1):
-        new_path = output_dir / build_output_name(index, temp_path.suffix, prefix)
-        temp_path.rename(new_path)
-        renamed_files.append(new_path)
+        if planned:
+            temp_pairs: list[tuple[Path, Path]] = []
+            for src_path, dst_path in planned:
+                temp_name = f"__temp__{uuid.uuid4().hex}{src_path.suffix.lower()}"
+                temp_path = output_dir / temp_name
+                src_path.rename(temp_path)
+                temp_pairs.append((temp_path, dst_path))
+
+            for temp_path, dst_path in temp_pairs:
+                temp_path.rename(dst_path)
+
+        renamed_files = final_files
+    else:
+        temp_files: list[tuple[Path, str]] = []
+        for file_path in ordered_files:
+            prefix, _ = split_existing_prefix_and_number(file_path)
+            temp_name = f"__temp__{uuid.uuid4().hex}{file_path.suffix.lower()}"
+            temp_path = output_dir / temp_name
+            file_path.rename(temp_path)
+            temp_files.append((temp_path, prefix))
+
+        renamed_files: list[Path] = []
+        for index, (temp_path, prefix) in enumerate(temp_files, start=1):
+            new_path = output_dir / build_output_name(index, temp_path.suffix, prefix)
+            temp_path.rename(new_path)
+            renamed_files.append(new_path)
 
     if logger:
         logger.write(tr("log_output_organized", count=len(renamed_files)))
@@ -398,22 +428,56 @@ def safe_delete_file(path: Path, logger: Logger | None = None, tr=t_identity):
             logger.write(tr("log_source_delete_failed", path=path, error=exc))
 
 
+def create_safe_workspace(output_dir: Path) -> tuple[Path, Path]:
+    root = output_dir / ".imagemerge_temp"
+    session_dir = root / f"session-{uuid.uuid4().hex}"
+    workspace_output_dir = session_dir / "output"
+    workspace_output_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir, workspace_output_dir
+
+
+def copy_media_to_workspace(output_dir: Path, workspace_output_dir: Path):
+    for path in output_dir.iterdir():
+        if is_media_file(path):
+            shutil.copy2(path, workspace_output_dir / path.name)
+
+
+def apply_workspace_to_output(output_dir: Path, workspace_output_dir: Path):
+    for path in list(output_dir.iterdir()):
+        if is_media_file(path):
+            path.unlink()
+    for path in workspace_output_dir.iterdir():
+        if is_media_file(path):
+            shutil.move(str(path), str(output_dir / path.name))
+
+
 def process_media(
     input_dir_configs: list[dict],
     output_dir: Path,
     mode: str,
     clear_output_first: bool,
+    remove_duplicates_in_place: bool,
+    use_safe_temp_workspace: bool,
     logger: Logger,
     tr=t_identity,
 ):
-    if not input_dir_configs and mode != MODE_MAIN_FOLDER:
+    if not input_dir_configs and mode not in {MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER}:
         raise ValueError(tr("error_no_input"))
 
     input_paths = [config["path"] for config in input_dir_configs]
-    if mode != MODE_MAIN_FOLDER and output_dir in input_paths:
+    if mode not in {MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER} and output_dir in input_paths:
         raise ValueError(tr("error_output_same_as_input"))
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    active_output_dir = output_dir
+    session_dir: Path | None = None
+    pending_source_deletes: list[Path] = []
+
+    if use_safe_temp_workspace:
+        session_dir, workspace_output_dir = create_safe_workspace(output_dir)
+        copy_media_to_workspace(output_dir, workspace_output_dir)
+        active_output_dir = workspace_output_dir
+        logger.write(f"Safe workspace: {session_dir}")
 
     logger.write(tr("log_start"))
     logger.write(tr("log_mode", mode=mode))
@@ -421,14 +485,16 @@ def process_media(
     source_scan_configs: list[dict] = []
     if mode == MODE_MAIN_FOLDER:
         seen_paths: set[Path] = set()
-        source_scan_configs.append({"path": output_dir, "prefix": ""})
-        seen_paths.add(output_dir)
+        source_scan_configs.append({"path": active_output_dir, "prefix": ""})
+        seen_paths.add(active_output_dir)
         for config in input_dir_configs:
             scan_path = config["path"]
             if scan_path in seen_paths:
                 continue
             source_scan_configs.append({"path": scan_path, "prefix": config.get("prefix", "")})
             seen_paths.add(scan_path)
+    elif mode == MODE_INSIDE_FOLDER:
+        source_scan_configs.append({"path": active_output_dir, "prefix": ""})
     else:
         source_scan_configs = list(input_dir_configs)
 
@@ -444,13 +510,49 @@ def process_media(
     if clear_output_first:
         logger.write(tr("log_clearing_output"))
         removed = 0
-        for path in list(output_dir.iterdir()):
+        for path in list(active_output_dir.iterdir()):
             if is_media_file(path):
                 path.unlink()
                 removed += 1
         logger.write(tr("log_cleared_output", count=removed))
 
-    existing_output_files = organize_output(output_dir, logger=logger, tr=tr)
+    if mode == MODE_INSIDE_FOLDER:
+        ordered_files = organize_output(active_output_dir, logger=logger, tr=tr, minimal_rename=True)
+        skipped = 0
+        deleted_sources = 0
+        failed = 0
+        if remove_duplicates_in_place:
+            seen_hashes: set[tuple[str, str]] = set()
+            for file_path in ordered_files:
+                try:
+                    file_hash = sha256_file(file_path)
+                    file_key = dedupe_key(file_hash, file_path.suffix)
+                    if file_key in seen_hashes:
+                        safe_delete_file(file_path, logger, tr)
+                        deleted_sources += 1
+                        skipped += 1
+                        continue
+                    seen_hashes.add(file_key)
+                except Exception as exc:
+                    failed += 1
+                    logger.write(tr("log_hash_failed", path=file_path, error=exc))
+
+        final_files = organize_output(active_output_dir, logger=logger, tr=tr, minimal_rename=True)
+        if use_safe_temp_workspace and session_dir:
+            apply_workspace_to_output(output_dir, active_output_dir)
+            shutil.rmtree(session_dir, ignore_errors=True)
+        logger.write("=" * 50)
+        logger.write(tr("log_added", count=0))
+        logger.write(tr("log_skipped", count=skipped))
+        logger.write(tr("log_moved_count", count=0))
+        logger.write(tr("log_copied_count", count=0))
+        logger.write(tr("log_deleted_sources", count=deleted_sources))
+        logger.write(tr("log_failed", count=failed))
+        logger.write(tr("log_total_output", count=len(final_files)))
+        logger.write(tr("log_done"))
+        return
+
+    existing_output_files = organize_output(active_output_dir, logger=logger, tr=tr)
     existing_hashes: dict[tuple[str, str], Path] = {}
     for file_path in existing_output_files:
         try:
@@ -485,29 +587,39 @@ def process_media(
             skipped += 1
             logger.write(tr("log_duplicate_skip", path=file_path))
             if mode in {MODE_MOVE, MODE_COPY_DELETE}:
-                safe_delete_file(file_path, logger, tr)
-                deleted_sources += 1
+                if use_safe_temp_workspace:
+                    pending_source_deletes.append(file_path)
+                else:
+                    safe_delete_file(file_path, logger, tr)
+                    deleted_sources += 1
             continue
 
         current_index += 1
-        dest_path = output_dir / build_output_name(current_index, ext, prefix)
+        dest_path = active_output_dir / build_output_name(current_index, ext, prefix)
 
         try:
             if mode == MODE_MOVE:
-                shutil.move(str(file_path), str(dest_path))
+                if use_safe_temp_workspace:
+                    shutil.copy2(file_path, dest_path)
+                    pending_source_deletes.append(file_path)
+                else:
+                    shutil.move(str(file_path), str(dest_path))
                 moved += 1
                 logger.write(tr("log_moved", source=file_path, dest=dest_path.name))
             elif mode == MODE_COPY_DELETE:
                 shutil.copy2(file_path, dest_path)
                 copied += 1
                 logger.write(tr("log_copied", source=file_path, dest=dest_path.name))
-                safe_delete_file(file_path, logger, tr)
-                deleted_sources += 1
+                if use_safe_temp_workspace:
+                    pending_source_deletes.append(file_path)
+                else:
+                    safe_delete_file(file_path, logger, tr)
+                    deleted_sources += 1
             elif mode == MODE_COPY_KEEP:
                 shutil.copy2(file_path, dest_path)
                 copied += 1
                 logger.write(tr("log_copied", source=file_path, dest=dest_path.name))
-            elif mode == MODE_MAIN_FOLDER:
+            elif mode in {MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER}:
                 shutil.copy2(file_path, dest_path)
                 copied += 1
                 logger.write(tr("log_copied", source=file_path, dest=dest_path.name))
@@ -520,7 +632,21 @@ def process_media(
             failed += 1
             logger.write(tr("log_process_failed", path=file_path, error=exc))
 
-    final_files = organize_output(output_dir, logger=logger, tr=tr)
+    final_files = organize_output(active_output_dir, logger=logger, tr=tr)
+
+    if use_safe_temp_workspace and session_dir:
+        apply_workspace_to_output(output_dir, active_output_dir)
+        unique_deletes: list[Path] = []
+        seen_del: set[Path] = set()
+        for path in pending_source_deletes:
+            if path not in seen_del:
+                seen_del.add(path)
+                unique_deletes.append(path)
+        for path in unique_deletes:
+            if path.exists():
+                safe_delete_file(path, logger, tr)
+                deleted_sources += 1
+        shutil.rmtree(session_dir, ignore_errors=True)
 
     logger.write("=" * 50)
     logger.write(tr("log_added", count=added))
@@ -539,12 +665,14 @@ class ProcessWorker(QObject):
     process_error = Signal(str)
     finished = Signal()
 
-    def __init__(self, input_configs, output_dir, mode, clear_output_first, tr):
+    def __init__(self, input_configs, output_dir, mode, clear_output_first, remove_duplicates_in_place, use_safe_temp_workspace, tr):
         super().__init__()
         self.input_configs = input_configs
         self.output_dir = output_dir
         self.mode = mode
         self.clear_output_first = clear_output_first
+        self.remove_duplicates_in_place = remove_duplicates_in_place
+        self.use_safe_temp_workspace = use_safe_temp_workspace
         self.tr = tr
 
     def run(self):
@@ -555,6 +683,8 @@ class ProcessWorker(QObject):
                 self.output_dir,
                 self.mode,
                 self.clear_output_first,
+                self.remove_duplicates_in_place,
+                self.use_safe_temp_workspace,
                 logger,
                 self.tr,
             )
@@ -591,9 +721,13 @@ def create_cli_parser() -> argparse.ArgumentParser:
                         help="Input folder entry, repeatable.")
     parser.add_argument("--output", default="", metavar="PATH", help="Output folder path")
     parser.add_argument("--mode", default=MODE_COPY_KEEP,
-                        choices=[MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE, MODE_MAIN_FOLDER], help="Process mode")
+                        choices=[MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE, MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER], help="Process mode")
     parser.add_argument("--clear-output", action="store_true",
                         help="Clear media files in output before processing")
+    parser.add_argument("--remove-duplicates", action="store_true",
+                        help="Inside organizer: remove duplicate files by content hash + extension")
+    parser.add_argument("--no-safe-temp", action="store_true",
+                        help="Disable safe temp workspace staging and write directly to output")
     parser.add_argument("--lang", default="", choices=sorted(SUPPORTED_LANGS), help="CLI log language")
     return parser
 
@@ -607,7 +741,7 @@ def run_cli(argv: list[str]) -> int:
         parser.print_help()
         return 0
 
-    if not args.input and args.mode != MODE_MAIN_FOLDER:
+    if not args.input and args.mode not in {MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER}:
         parser.error("--input is required in CLI mode")
     if not args.output:
         parser.error("--output is required in CLI mode")
@@ -623,6 +757,8 @@ def run_cli(argv: list[str]) -> int:
         output_dir=output_dir,
         mode=args.mode,
         clear_output_first=args.clear_output,
+        remove_duplicates_in_place=args.remove_duplicates,
+        use_safe_temp_workspace=(not args.no_safe_temp),
         logger=logger,
         tr=tr,
     )
@@ -1107,6 +1243,12 @@ class App(QMainWindow):
         self.page_btn_main.setCursor(Qt.PointingHandCursor)
         self.page_btn_main.clicked.connect(lambda: self._set_workflow(WORKFLOW_MAIN_FOLDER))
         mode_switch_lay.addWidget(self.page_btn_main)
+
+        self.page_btn_inside = QPushButton()
+        self.page_btn_inside.setObjectName("pageModeBtn")
+        self.page_btn_inside.setCursor(Qt.PointingHandCursor)
+        self.page_btn_inside.clicked.connect(lambda: self._set_workflow(WORKFLOW_INSIDE_FOLDER))
+        mode_switch_lay.addWidget(self.page_btn_inside)
         mode_switch_lay.addStretch()
         root_lay.insertWidget(1, mode_switch)
 
@@ -1254,7 +1396,12 @@ class App(QMainWindow):
         left_lay.addWidget(self.opt_section_label)
 
         self.clear_output_checkbox = QCheckBox()
+        self.clear_output_checkbox.setChecked(True)
         left_lay.addWidget(self.clear_output_checkbox)
+
+        self.safe_temp_checkbox = QCheckBox()
+        self.safe_temp_checkbox.setChecked(True)
+        left_lay.addWidget(self.safe_temp_checkbox)
 
         self.mode_note_label = QLabel()
         self.mode_note_label.setObjectName("noteLabel")
@@ -1314,7 +1461,15 @@ class App(QMainWindow):
         main_lay.addLayout(main_out_row)
 
         self.main_clear_output_checkbox = QCheckBox()
+        self.main_clear_output_checkbox.setChecked(True)
         main_lay.addWidget(self.main_clear_output_checkbox)
+
+        self.main_remove_duplicates_checkbox = QCheckBox()
+        main_lay.addWidget(self.main_remove_duplicates_checkbox)
+
+        self.main_safe_temp_checkbox = QCheckBox()
+        self.main_safe_temp_checkbox.setChecked(True)
+        main_lay.addWidget(self.main_safe_temp_checkbox)
 
         self.main_sources_hint_label = QLabel()
         self.main_sources_hint_label.setObjectName("noteLabel")
@@ -1539,6 +1694,7 @@ class App(QMainWindow):
 
         self.page_btn_merge.setText(self.t("page_mode_merge"))
         self.page_btn_main.setText(self.t("page_mode_main_folder"))
+        self.page_btn_inside.setText(self.t("page_mode_inside_folder"))
 
         self.add_folder_btn.setText("+ " + self.t("btn_add_folder"))
         self.edit_prefix_btn.setText(self.t("btn_edit_prefix"))
@@ -1576,10 +1732,20 @@ class App(QMainWindow):
 
         self.clear_output_checkbox.setText(self.t("opt_clear_output"))
         self.main_clear_output_checkbox.setText(self.t("opt_clear_output"))
+        self.safe_temp_checkbox.setText(self.t("opt_safe_temp_workspace"))
+        self.main_safe_temp_checkbox.setText(self.t("opt_safe_temp_workspace"))
+        self.main_remove_duplicates_checkbox.setText(self.t("opt_remove_duplicates"))
         self.mode_note_label.setText(self.t("mode_note"))
-        self.main_page_title.setText(self.t("main_page_title"))
-        self.main_page_desc.setText(self.t("main_page_desc"))
-        self.main_page_note_label.setText(self.t("main_page_note"))
+        if self._current_workflow == WORKFLOW_INSIDE_FOLDER:
+            self.main_page_title.setText(self.t("inside_page_title"))
+            self.main_page_desc.setText(self.t("inside_page_desc"))
+            self.main_page_note_label.setText(self.t("inside_page_note"))
+            self.main_import_section_label.setText(self.t("inside_page_import_section").upper())
+        else:
+            self.main_page_title.setText(self.t("main_page_title"))
+            self.main_page_desc.setText(self.t("main_page_desc"))
+            self.main_page_note_label.setText(self.t("main_page_note"))
+            self.main_import_section_label.setText(self.t("main_page_import_section").upper())
         self.info_btn.setToolTip("About this app")
         self.info_btn_main.setToolTip("About this app")
 
@@ -1641,6 +1807,7 @@ class App(QMainWindow):
                 self.t("mode_copy_delete"),
                 self.t("mode_move"),
                 self.t("mode_main_folder"),
+                self.t("mode_inside_folder"),
             ]
         )
         langs = ", ".join(LANGUAGE_NATIVE_NAMES.get(code, code.upper()) for code in self._lang_codes)
@@ -1722,19 +1889,33 @@ class App(QMainWindow):
         return self._current_mode
 
     def _apply_workflow_button_state(self):
-        is_merge = self._current_workflow == WORKFLOW_MERGE
-        self.page_btn_merge.setProperty("active", is_merge)
-        self.page_btn_main.setProperty("active", not is_merge)
-        self.page_btn_merge.style().unpolish(self.page_btn_merge)
-        self.page_btn_merge.style().polish(self.page_btn_merge)
-        self.page_btn_main.style().unpolish(self.page_btn_main)
-        self.page_btn_main.style().polish(self.page_btn_main)
+        self.page_btn_merge.setProperty("active", self._current_workflow == WORKFLOW_MERGE)
+        self.page_btn_main.setProperty("active", self._current_workflow == WORKFLOW_MAIN_FOLDER)
+        self.page_btn_inside.setProperty("active", self._current_workflow == WORKFLOW_INSIDE_FOLDER)
+        for btn in (self.page_btn_merge, self.page_btn_main, self.page_btn_inside):
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+    def _apply_main_page_mode_state(self):
+        is_inside = self._current_workflow == WORKFLOW_INSIDE_FOLDER
+        self.main_sources_hint_label.setVisible(not is_inside)
+        self.main_import_section_label.setVisible(not is_inside)
+        self.main_source_container.setVisible(not is_inside)
+        self.main_add_folder_btn.setVisible(not is_inside)
+        self.main_remove_btn.setVisible(not is_inside)
+        self.main_clear_btn.setVisible(not is_inside)
+        self.main_add_folder_btn.setEnabled(not is_inside)
+        self.main_remove_btn.setEnabled((not is_inside) and (self._main_selected_path is not None))
+        self.main_clear_btn.setEnabled(not is_inside)
+        self.main_remove_duplicates_checkbox.setVisible(is_inside)
 
     def _set_workflow(self, workflow: str):
-        if workflow not in {WORKFLOW_MERGE, WORKFLOW_MAIN_FOLDER}:
+        if workflow not in {WORKFLOW_MERGE, WORKFLOW_MAIN_FOLDER, WORKFLOW_INSIDE_FOLDER}:
             workflow = WORKFLOW_MERGE
         self._current_workflow = workflow
         self.left_page_stack.setCurrentIndex(0 if workflow == WORKFLOW_MERGE else 1)
+        self._apply_main_page_mode_state()
+        self._retranslate_ui()
         self._apply_workflow_button_state()
 
     def _set_output_path(self, path_text: str):
@@ -1934,10 +2115,20 @@ class App(QMainWindow):
         if self._current_workflow == WORKFLOW_MAIN_FOLDER:
             mode = MODE_MAIN_FOLDER
             clear_output_first = self.main_clear_output_checkbox.isChecked()
+            remove_duplicates_in_place = False
+            use_safe_temp_workspace = self.main_safe_temp_checkbox.isChecked()
             input_configs = [{"path": e["path"], "prefix": ""} for e in self.main_input_entries]
+        elif self._current_workflow == WORKFLOW_INSIDE_FOLDER:
+            mode = MODE_INSIDE_FOLDER
+            clear_output_first = self.main_clear_output_checkbox.isChecked()
+            remove_duplicates_in_place = self.main_remove_duplicates_checkbox.isChecked()
+            use_safe_temp_workspace = self.main_safe_temp_checkbox.isChecked()
+            input_configs = []
         else:
             mode = self._selected_mode()
             clear_output_first = self.clear_output_checkbox.isChecked()
+            remove_duplicates_in_place = False
+            use_safe_temp_workspace = self.safe_temp_checkbox.isChecked()
 
         if self._current_workflow == WORKFLOW_MERGE and not input_configs:
             QMessageBox.warning(self, self.t("app_title"), self.t("msg_need_input"))
@@ -1959,7 +2150,15 @@ class App(QMainWindow):
         output_dir = Path(output_dir_text)
 
         self.worker_thread = QThread(self)
-        self.worker = ProcessWorker(input_configs, output_dir, mode, clear_output_first, self.t)
+        self.worker = ProcessWorker(
+            input_configs,
+            output_dir,
+            mode,
+            clear_output_first,
+            remove_duplicates_in_place,
+            use_safe_temp_workspace,
+            self.t,
+        )
         self.worker.moveToThread(self.worker_thread)
 
         self.worker_thread.started.connect(self.worker.run)
