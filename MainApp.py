@@ -338,17 +338,22 @@ def organize_output(
     logger: Logger | None = None,
     tr=t_identity,
     minimal_rename: bool = False,
+    sort_by_file_mtime: bool = False,
 ):
     media_files = [path for path in output_dir.iterdir() if is_media_file(path)]
 
-    image_files = sorted(
-        [path for path in media_files if is_image(path)],
-        key=lambda path: split_existing_prefix_and_number(path)[1],
-    )
-    video_files = sorted(
-        [path for path in media_files if is_video(path)],
-        key=lambda path: split_existing_prefix_and_number(path)[1],
-    )
+    def _sort_by_mtime_then_name(path: Path):
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            mtime = 0
+        return (mtime, path.stem.lower(), path.suffix.lower())
+
+    image_sort_key = _sort_by_mtime_then_name if sort_by_file_mtime else lambda path: split_existing_prefix_and_number(path)[1]
+    video_sort_key = _sort_by_mtime_then_name if sort_by_file_mtime else lambda path: split_existing_prefix_and_number(path)[1]
+
+    image_files = sorted([path for path in media_files if is_image(path)], key=image_sort_key)
+    video_files = sorted([path for path in media_files if is_video(path)], key=video_sort_key)
     ordered_files = image_files + video_files
 
     if minimal_rename:
@@ -517,7 +522,13 @@ def process_media(
         logger.write(tr("log_cleared_output", count=removed))
 
     if mode == MODE_INSIDE_FOLDER:
-        ordered_files = organize_output(active_output_dir, logger=logger, tr=tr, minimal_rename=True)
+        ordered_files = organize_output(
+            active_output_dir,
+            logger=logger,
+            tr=tr,
+            minimal_rename=True,
+            sort_by_file_mtime=True,
+        )
         skipped = 0
         deleted_sources = 0
         failed = 0
@@ -537,7 +548,13 @@ def process_media(
                     failed += 1
                     logger.write(tr("log_hash_failed", path=file_path, error=exc))
 
-        final_files = organize_output(active_output_dir, logger=logger, tr=tr, minimal_rename=True)
+        final_files = organize_output(
+            active_output_dir,
+            logger=logger,
+            tr=tr,
+            minimal_rename=True,
+            sort_by_file_mtime=True,
+        )
         if use_safe_temp_workspace and session_dir:
             apply_workspace_to_output(output_dir, active_output_dir)
             shutil.rmtree(session_dir, ignore_errors=True)
@@ -1907,6 +1924,7 @@ class App(QMainWindow):
         self.main_add_folder_btn.setEnabled(not is_inside)
         self.main_remove_btn.setEnabled((not is_inside) and (self._main_selected_path is not None))
         self.main_clear_btn.setEnabled(not is_inside)
+        self.main_clear_output_checkbox.setVisible(not is_inside)
         self.main_remove_duplicates_checkbox.setVisible(is_inside)
 
     def _set_workflow(self, workflow: str):
@@ -2120,7 +2138,7 @@ class App(QMainWindow):
             input_configs = [{"path": e["path"], "prefix": ""} for e in self.main_input_entries]
         elif self._current_workflow == WORKFLOW_INSIDE_FOLDER:
             mode = MODE_INSIDE_FOLDER
-            clear_output_first = self.main_clear_output_checkbox.isChecked()
+            clear_output_first = False
             remove_duplicates_in_place = self.main_remove_duplicates_checkbox.isChecked()
             use_safe_temp_workspace = self.main_safe_temp_checkbox.isChecked()
             input_configs = []
