@@ -1,0 +1,1 @@
+"""ImageMerge application package."""
