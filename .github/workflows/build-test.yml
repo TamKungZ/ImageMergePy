@@ -34,7 +34,7 @@ jobs:
 
       - name: Verify syntax
         run: |
-          python -m py_compile MainApp.py build_nuitka.py generate_embedded_locales.py
+          python -m compileall MainApp.py src build_nuitka.py generate_embedded_locales.py
 
       - name: Build with Nuitka
         run: python build_nuitka.py

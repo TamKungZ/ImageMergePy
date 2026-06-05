@@ -105,8 +105,8 @@ def load_app_metadata(root: Path) -> dict[str, str]:
         "company_name": "",
         "product_name": APP_NAME,
         "file_description": APP_NAME,
-        "file_version": "1.0.0.0",
-        "product_version": "1.0.0.0",
+        "file_version": "1.1.0.0",
+        "product_version": "1.1.0.0",
         "copyright": "",
         "icon_ico": "",
         "icon_icns": "",
@@ -282,6 +282,10 @@ def binary_only() -> bool:
     return os.environ.get("IMAGEMERGE_BINARY_ONLY", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def windows_build_both() -> bool:
+    return os.environ.get("IMAGEMERGE_WINDOWS_BOTH", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def run_build_with_fallback(root: Path, out_dir: Path, onefile_args: list[str], standalone_args: list[str]):
     if try_onefile():
         onefile_cmd = nuitka_base_cmd(root, out_dir) + onefile_args + [ENTRY_FILE]
@@ -303,6 +307,33 @@ def build_windows(root: Path):
     metadata = load_app_metadata(root)
     metadata_args = windows_metadata_args(root, metadata)
 
+    if windows_build_both():
+        standalone_cmd = nuitka_base_cmd(root, out_dir) + [
+            "--windows-console-mode=attach",
+            *metadata_args,
+            ENTRY_FILE,
+        ]
+        run_cmd(standalone_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
+
+        binary_path = out_dir / (APP_NAME + ".dist") / (APP_NAME + ".exe")
+        print(f"PE standalone folder build ready: {binary_path}")
+        sign_windows_binary(binary_path)
+
+        onefile_out_dir = root / "dist" / "windows-onefile"
+        onefile_cmd = nuitka_base_cmd(root, onefile_out_dir) + [
+            "--onefile",
+            "--onefile-no-compression",
+            "--windows-console-mode=attach",
+            *metadata_args,
+            ENTRY_FILE,
+        ]
+        run_cmd(onefile_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(onefile_out_dir))
+
+        onefile_binary_path = onefile_out_dir / (APP_NAME + ".exe")
+        print(f"PE portable onefile build ready: {onefile_binary_path}")
+        sign_windows_binary(onefile_binary_path)
+        return
+
     mode = run_build_with_fallback(
         root,
         out_dir,
@@ -312,10 +343,10 @@ def build_windows(root: Path):
     binary_path = out_dir / (APP_NAME + ".exe")
     if mode == "onefile":
         binary_path = out_dir / (APP_NAME + ".exe")
-        print(f"PE build ready: {binary_path}")
+        print(f"PE onefile build ready: {binary_path}")
     else:
         binary_path = out_dir / (APP_NAME + ".dist") / (APP_NAME + ".exe")
-        print(f"PE build ready: {binary_path}")
+        print(f"PE standalone folder build ready: {binary_path}")
 
     sign_windows_binary(binary_path)
 

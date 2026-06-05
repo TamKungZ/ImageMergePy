@@ -22,6 +22,12 @@ from .config import (
 )
 from .i18n import t_identity
 
+IMAGE_EXT_ORDER = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff")
+VIDEO_EXT_ORDER = (".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv", ".ts", ".mts")
+IMAGE_EXT_PRIORITY = {ext: index for index, ext in enumerate(IMAGE_EXT_ORDER)}
+VIDEO_EXT_PRIORITY = {ext: index for index, ext in enumerate(VIDEO_EXT_ORDER)}
+
+
 def normalize_prefix(prefix: str) -> str:
     prefix = prefix.strip()
     if not prefix:
@@ -49,6 +55,19 @@ def split_existing_prefix_and_number(path: Path) -> tuple[str, int]:
     if match_number:
         return "", int(match_number.group(1))
     return "", 99999999
+
+
+def split_numbered_stem(path: Path) -> tuple[int, int]:
+    stem = path.stem.strip()
+    match = re.match(r"^(?:(.+?)-)?(\d+)(?:\s*\((\d+)\))?$", stem)
+    if match:
+        duplicate_index = int(match.group(3) or 0)
+        return int(match.group(2)), duplicate_index
+    match_number = re.match(r"^(\d+)(?:\s*\((\d+)\))?", stem)
+    if match_number:
+        duplicate_index = int(match_number.group(2) or 0)
+        return int(match_number.group(1)), duplicate_index
+    return 99999999, 99999999
 
 
 def dedupe_key(file_hash: str, ext: str) -> tuple[str, str]:
@@ -86,12 +105,33 @@ def source_sort_key(item):
     stem_lower = file_path.stem.lower()
     ext_lower = file_path.suffix.lower()
     group_type, value = classify_source_name(file_path)
+    ext_priority = IMAGE_EXT_PRIORITY.get(ext_lower, VIDEO_EXT_PRIORITY.get(ext_lower, 999999))
+    number, duplicate_index = split_numbered_stem(file_path)
 
     if group_type == "img_number":
-        return (0, int(value), ctime, stem_lower, ext_lower)
+        return (ext_priority, 0, int(value), duplicate_index, ctime, stem_lower)
     if group_type == "time_only":
-        return (1, ctime, stem_lower, ext_lower)
-    return (2, ctime, stem_lower, ext_lower)
+        return (ext_priority, 1, ctime, stem_lower)
+    return (ext_priority, 2, number, duplicate_index, ctime, stem_lower)
+
+
+def output_sort_key(path: Path, sort_by_file_mtime: bool = False):
+    ext_lower = path.suffix.lower()
+    ext_priority = IMAGE_EXT_PRIORITY.get(ext_lower, VIDEO_EXT_PRIORITY.get(ext_lower, 999999))
+    stem_lower = path.stem.lower()
+
+    if sort_by_file_mtime:
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            mtime = 0
+        number, duplicate_index = split_numbered_stem(path)
+        return (ext_priority, mtime, number, duplicate_index, stem_lower)
+
+    number, duplicate_index = split_numbered_stem(path)
+    prefix, existing_number = split_existing_prefix_and_number(path)
+    sort_number = number if number != 99999999 else existing_number
+    return (ext_priority, sort_number, duplicate_index, prefix, stem_lower)
 
 
 def is_media_file(path: Path) -> bool:
@@ -123,18 +163,14 @@ def organize_output(
 ):
     media_files = [path for path in output_dir.iterdir() if is_media_file(path)]
 
-    def _sort_by_mtime_then_name(path: Path):
-        try:
-            mtime = os.path.getmtime(path)
-        except OSError:
-            mtime = 0
-        return (mtime, path.stem.lower(), path.suffix.lower())
-
-    image_sort_key = _sort_by_mtime_then_name if sort_by_file_mtime else lambda path: split_existing_prefix_and_number(path)[1]
-    video_sort_key = _sort_by_mtime_then_name if sort_by_file_mtime else lambda path: split_existing_prefix_and_number(path)[1]
-
-    image_files = sorted([path for path in media_files if is_image(path)], key=image_sort_key)
-    video_files = sorted([path for path in media_files if is_video(path)], key=video_sort_key)
+    image_files = sorted(
+        [path for path in media_files if is_image(path)],
+        key=lambda path: output_sort_key(path, sort_by_file_mtime),
+    )
+    video_files = sorted(
+        [path for path in media_files if is_video(path)],
+        key=lambda path: output_sort_key(path, sort_by_file_mtime),
+    )
     ordered_files = image_files + video_files
 
     if minimal_rename:

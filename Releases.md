@@ -1,3 +1,42 @@
+Tag: v1.1.0
+Release title: v1.1.0 - Extension-Grouped Sorting + Source Refactor
+Release notes:
+## ImageMerge v1.1.0
+
+Update focused on safer maintainability and deterministic media numbering.
+
+### Highlights
+- Refactored the single large `MainApp.py` into a structured `src/media_merge/` package
+- Kept `MainApp.py` as the same launch entry point for source and packaged runs
+- Added deterministic extension-group sorting before output numbering
+- Images are now grouped in this order before numbering: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`, `.tiff`
+- Files inside the same extension group are sorted by numeric filename when possible, including names like `1.png`, `02.png`, `10.png`, and `1(1).jpg`
+- Video files still run after image files and now use a deterministic extension order internally
+- Fixed CLI processing call after the source split so `python MainApp.py --cli ...` runs correctly
+- Windows release now includes a separate portable onefile executable: `ImageMerge-windows-x64-portable.exe`
+- Updated executable metadata version to `1.1.0.0`
+
+### Sorting Example
+```text
+1.png      -> 0001.png
+02.png     -> 0002.png
+10.png     -> 0003.png
+12.png     -> 0004.png
+1.jpg      -> 0005.jpg
+1(1).jpg   -> 0006.jpg
+1.webp     -> 0007.webp
+```
+
+### Verification
+- `python -m compileall MainApp.py src`
+- CLI smoke test for extension-group ordering
+- Offscreen PySide6 window construction smoke test
+
+### License
+This project remains open-source under the **MIT License**.
+
+---
+
 Tag: v1.0.5
 Release title: v1.0.5 - Inside Organizer + Safe Temp Workspace
 Release notes:

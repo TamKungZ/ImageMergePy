@@ -39,6 +39,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build with Nuitka
+        env:
+          IMAGEMERGE_WINDOWS_BOTH: ${{ runner.os == 'Windows' && '1' || '' }}
         run: python build_nuitka.py
 
       - name: Install Linux packaging tools
@@ -460,6 +462,10 @@ jobs:
           $mainExePath = Join-Path $distDir "ImageMerge.exe"
           Sign-ReleaseFile -Path $mainExePath
 
+          $portableExePath = "dist\windows-onefile\ImageMerge.exe"
+          if (-not (Test-Path $portableExePath)) { throw "Missing Windows portable onefile executable: $portableExePath" }
+          Sign-ReleaseFile -Path $portableExePath
+
           New-Item -ItemType Directory -Force -Path installer | Out-Null
           New-Item -ItemType Directory -Force -Path release_assets | Out-Null
 
@@ -693,6 +699,14 @@ jobs:
               if dist_dir is None:
                   raise FileNotFoundError('Missing Windows dist folder (MainApp.dist/ImageMerge.dist)')
               zip_dir(f'ImageMerge-windows-{arch}', dist_dir, 'ImageMerge')
+
+              onefile_exe = first_existing([
+                  root / 'dist' / 'windows-onefile' / 'ImageMerge.exe',
+                  root / 'dist' / 'windows' / 'ImageMerge.exe',
+              ])
+              if onefile_exe is None:
+                  raise FileNotFoundError('Missing Windows portable onefile executable')
+              shutil.copy2(onefile_exe, out / f'ImageMerge-windows-{arch}-portable.exe')
           elif runner == 'Linux':
               import platform
               arch = normalize_arch(platform.machine())
@@ -741,11 +755,11 @@ jobs:
           merge-multiple: true
           path: release_files
 
-      - name: Generate SHA256 checksums (Linux)
+      - name: Generate SHA256 checksums
         shell: bash
         run: |
           cd release_files
-          sha256sum ImageMerge-linux-* > SHA256SUMS
+          sha256sum ImageMerge-* > SHA256SUMS
 
       - name: Import GPG key
         shell: bash

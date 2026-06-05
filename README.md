@@ -2,17 +2,24 @@
 
 A GUI tool to merge images/videos from multiple folders, remove duplicates with SHA-256, and rename files into a clean sequential format.
 
+Current app version: `1.1.0`
+
 ## Features
 
 - Merge media from multiple input folders into one output folder
 - De-duplicate files using `SHA-256 + file extension`
-- Supports 3 operation modes
+- Supports 5 operation modes
   - `copy_keep`: copy only, keep source files
   - `copy_delete`: copy, then delete source files
   - `move`: move files from input to output
+  - `main_folder`: organize the output folder first, then optionally merge imported folders
+  - `inside_folder`: organize media already inside the selected folder
 - Set a per-folder `prefix`
 - Rename files as `prefix-0001.jpg` or `0001.jpg`
-- Keep output ordered: images first, videos last
+- Keep output ordered with deterministic extension groups: images first, videos last
+- Image sorting groups extensions first: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`, `.tiff`
+- Within each extension group, numeric names such as `1.png`, `02.png`, `10.png`, and `1(1).jpg` are sorted by their number before final renaming
+- Safe temp workspace is enabled by default to stage output changes before applying them
 - New desktop UI built with `PySide6`
 - Native builds with `Nuitka`
 
@@ -44,6 +51,7 @@ winget install TamKungZ.ImageMerge
 
 - Download and run `ImageMerge-windows-x64.msi`
 - Or portable folder: extract `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
+- Or portable single executable: download `ImageMerge-windows-x64-portable.exe`
 - Microsoft Store submission asset is also generated as `ImageMergeGUI-windows-x64.msix`
 - WinGet automation is configured for package id `TamKungZ.ImageMerge`
 
@@ -104,11 +112,48 @@ CLI options:
 
 - `--input PATH[::PREFIX]` (repeatable)
 - `--output PATH`
-- `--mode copy_keep|copy_delete|move`
+- `--mode copy_keep|copy_delete|move|main_folder|inside_folder`
 - `--clear-output`
-- `--lang en|th`
+- `--remove-duplicates`
+- `--no-safe-temp`
+- `--lang ar|de|en|es|fr|id|ja|ko|ru|th|vi|zh`
 
 In packaged builds, run the same options directly from the app binary (Windows/Linux/macOS).
+
+## Sorting Rules
+
+ImageMerge assigns output numbers after sorting media in a stable, predictable order:
+
+1. Images are processed before videos.
+2. Image files are grouped by extension in this order: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`, `.tiff`.
+3. Files inside the same extension group are sorted by numeric filename when possible.
+4. Existing prefixes are preserved when reorganizing files already named like `trip-0001.jpg`.
+5. Video files use their own extension order after images.
+
+Example:
+
+```text
+1.png      -> 0001.png
+02.png     -> 0002.png
+10.png     -> 0003.png
+12.png     -> 0004.png
+1.jpg      -> 0005.jpg
+1(1).jpg   -> 0006.jpg
+1.webp     -> 0007.webp
+```
+
+This means modified date will not cause `.webp` files to jump before `.png` or `.jpg` groups during normal merge numbering.
+
+## Source Layout
+
+`MainApp.py` is kept as the launch entry point. The application code is split under `src/media_merge/`:
+
+- `config.py`: metadata, constants, fonts, language discovery
+- `media_ops.py`: media scanning, sorting, duplicate detection, renaming, copy/move logic
+- `cli.py`: command-line interface
+- `worker.py`: Qt worker thread wrapper
+- `ui/app.py`: main PySide6 window
+- `ui/widgets.py`: reusable UI widgets
 
 ## Build (Nuitka)
 
@@ -135,6 +180,7 @@ Windows build also reads `app_metadata.json` and injects version/company/product
 `build_nuitka.py` detects the current OS and builds native output:
 
 - **Windows**: PE executable (`ImageMerge.exe`) under `dist/windows/ImageMerge.dist/`
+  - Local `build.bat` also builds a portable onefile executable at `dist/windows-onefile/ImageMerge.exe`
 - **Linux**: ELF binary (`ImageMerge`) under `dist/linux/ImageMerge.dist/`
 - **macOS**:
   - Mach-O binary under `dist/macos-binary/ImageMerge.dist/`
