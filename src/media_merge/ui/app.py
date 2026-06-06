@@ -78,8 +78,8 @@ class App(QMainWindow):
             self.setWindowIcon(QIcon(str(icon_path)))
 
         self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
-        self.resize(1360, 900)
-        self.setMinimumSize(1100, 720)
+        self.resize(1280, 720)
+        self.setMinimumSize(1024, 640)
 
         self.input_entries: list[dict] = []
         self._source_rows: dict[str, SourceRow] = {}
@@ -137,6 +137,16 @@ class App(QMainWindow):
 
         /* Titlebar */
         QWidget#titlebar {{ background: {C_SURFACE}; border-bottom: 1px solid {C_BORDER2}; }}
+        QWidget#workflowBar {{ background: {C_SURFACE}; border-bottom: 1px solid {C_BORDER2}; }}
+        QWidget#contentCard {{
+            background: {C_SURFACE};
+            border: 1px solid {C_BORDER2};
+            border-radius: 12px;
+        }}
+        QLabel#pageTitle {{ color:{C_TEXT}; font-size:24px; font-weight:700; }}
+        QLabel#pageDescription {{ color:{C_TEXT3}; font-size:13px; }}
+        QLabel#runTitle {{ color:{C_TEXT}; font-size:18px; font-weight:700; }}
+        QLabel#runSummary {{ color:{C_TEXT3}; font-size:13px; }}
 
         /* Scroll areas */
         QScrollArea {{ background: transparent; border: none; }}
@@ -239,12 +249,12 @@ class App(QMainWindow):
         QPushButton#tinyBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
 
         QPushButton#pageModeBtn {{
-            background: {C_SURFACE2}; color: {C_TEXT2}; border: 1px solid {C_BORDER2};
-            border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 600;
+            background: transparent; color: {C_TEXT2}; border: 1px solid transparent;
+            border-radius: 9px; padding: 9px 14px; font-size: 13px; font-weight: 600;
         }}
         QPushButton#pageModeBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
         QPushButton#pageModeBtn[active="true"] {{
-            background: {C_ACCENT_DIM}; color: {C_ACCENT}; border: 1px solid {C_ACCENT};
+            background: {C_ACCENT}; color: #ffffff; border: 1px solid {C_ACCENT};
         }}
 
         /* Checkbox */
@@ -279,13 +289,13 @@ class App(QMainWindow):
 
         titlebar = QWidget()
         titlebar.setObjectName("titlebar")
-        titlebar.setFixedHeight(58)
+        titlebar.setFixedHeight(66)
         tb_lay = QHBoxLayout(titlebar)
-        tb_lay.setContentsMargins(20, 0, 20, 0)
+        tb_lay.setContentsMargins(24, 0, 24, 0)
         tb_lay.setSpacing(10)
 
         self.app_name_label = QLabel()
-        self.app_name_label.setStyleSheet(f"color:{C_TEXT}; font-size:22px; font-weight:700;")
+        self.app_name_label.setStyleSheet(f"color:{C_TEXT}; font-size:23px; font-weight:700;")
 
         tb_lay.addWidget(self.app_name_label)
         tb_lay.addStretch()
@@ -317,9 +327,9 @@ class App(QMainWindow):
         root_lay.addWidget(splitter, 1)
 
         mode_switch = QWidget()
-        mode_switch.setObjectName("titlebar")
+        mode_switch.setObjectName("workflowBar")
         mode_switch_lay = QHBoxLayout(mode_switch)
-        mode_switch_lay.setContentsMargins(20, 8, 20, 8)
+        mode_switch_lay.setContentsMargins(20, 7, 20, 7)
         mode_switch_lay.setSpacing(8)
 
         self.page_btn_merge = QPushButton()
@@ -354,10 +364,24 @@ class App(QMainWindow):
         left_widget = QWidget()
         left_widget.setStyleSheet(f"background:{C_BG};")
         left_lay = QVBoxLayout(left_widget)
-        left_lay.setContentsMargins(20, 20, 20, 20)
-        left_lay.setSpacing(20)
+        left_lay.setContentsMargins(22, 20, 22, 22)
+        left_lay.setSpacing(14)
+
+        self.merge_page_title = QLabel()
+        self.merge_page_title.setObjectName("pageTitle")
+        left_lay.addWidget(self.merge_page_title)
+
+        self.merge_page_desc = QLabel()
+        self.merge_page_desc.setObjectName("pageDescription")
+        self.merge_page_desc.setWordWrap(True)
+        left_lay.addWidget(self.merge_page_desc)
 
         self.source_section_label = _section_label("")
+        source_card = QWidget()
+        source_card.setObjectName("contentCard")
+        source_card_lay = QVBoxLayout(source_card)
+        source_card_lay.setContentsMargins(16, 14, 16, 16)
+        source_card_lay.setSpacing(12)
         src_hdr = QHBoxLayout()
         src_hdr.addWidget(self.source_section_label)
         src_hdr.addStretch()
@@ -395,7 +419,7 @@ class App(QMainWindow):
         src_hdr.addWidget(self.edit_prefix_btn)
         src_hdr.addWidget(self.remove_btn)
         src_hdr.addWidget(self.clear_btn)
-        left_lay.addLayout(src_hdr)
+        source_card_lay.addLayout(src_hdr)
 
         src_container = QWidget()
         src_container.setObjectName("sourceContainer")
@@ -431,7 +455,7 @@ class App(QMainWindow):
         self.rows_scroll.setWidgetResizable(True)
         self.rows_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.rows_scroll.setFrameShape(QFrame.NoFrame)
-        self.rows_scroll.setFixedHeight(170)
+        self.rows_scroll.setFixedHeight(132)
         self.rows_scroll.setStyleSheet("background:transparent;")
 
         self.rows_widget = QWidget()
@@ -448,10 +472,16 @@ class App(QMainWindow):
 
         self.rows_scroll.setWidget(self.rows_widget)
         src_container_lay.addWidget(self.rows_scroll)
-        left_lay.addWidget(src_container)
+        source_card_lay.addWidget(src_container)
+        left_lay.addWidget(source_card)
 
         self.output_section_label = _section_label("")
-        left_lay.addWidget(self.output_section_label)
+        output_card = QWidget()
+        output_card.setObjectName("contentCard")
+        output_card_lay = QVBoxLayout(output_card)
+        output_card_lay.setContentsMargins(16, 14, 16, 16)
+        output_card_lay.setSpacing(10)
+        output_card_lay.addWidget(self.output_section_label)
 
         out_row = QHBoxLayout()
         self.output_input = QLineEdit()
@@ -464,10 +494,16 @@ class App(QMainWindow):
         self.output_btn.setCursor(Qt.PointingHandCursor)
         self.output_btn.clicked.connect(self.choose_output_folder)
         out_row.addWidget(self.output_btn)
-        left_lay.addLayout(out_row)
+        output_card_lay.addLayout(out_row)
+        left_lay.addWidget(output_card)
 
         self.mode_section_label = _section_label("")
-        left_lay.addWidget(self.mode_section_label)
+        mode_card_container = QWidget()
+        mode_card_container.setObjectName("contentCard")
+        mode_card_container_lay = QVBoxLayout(mode_card_container)
+        mode_card_container_lay.setContentsMargins(16, 14, 16, 16)
+        mode_card_container_lay.setSpacing(12)
+        mode_card_container_lay.addWidget(self.mode_section_label)
 
         mode_grid = QHBoxLayout()
         mode_grid.setSpacing(12)
@@ -480,23 +516,30 @@ class App(QMainWindow):
             mode_grid.addWidget(card)
 
         self.mode_cards[MODE_COPY_KEEP].set_selected(True)
-        left_lay.addLayout(mode_grid)
+        mode_card_container_lay.addLayout(mode_grid)
+        left_lay.addWidget(mode_card_container)
 
         self.opt_section_label = _section_label("")
-        left_lay.addWidget(self.opt_section_label)
+        options_card = QWidget()
+        options_card.setObjectName("contentCard")
+        options_card_lay = QVBoxLayout(options_card)
+        options_card_lay.setContentsMargins(16, 14, 16, 16)
+        options_card_lay.setSpacing(10)
+        options_card_lay.addWidget(self.opt_section_label)
 
         self.clear_output_checkbox = QCheckBox()
         self.clear_output_checkbox.setChecked(True)
-        left_lay.addWidget(self.clear_output_checkbox)
+        options_card_lay.addWidget(self.clear_output_checkbox)
 
         self.safe_temp_checkbox = QCheckBox()
         self.safe_temp_checkbox.setChecked(True)
-        left_lay.addWidget(self.safe_temp_checkbox)
+        options_card_lay.addWidget(self.safe_temp_checkbox)
 
         self.mode_note_label = QLabel()
         self.mode_note_label.setObjectName("noteLabel")
         self.mode_note_label.setWordWrap(True)
-        left_lay.addWidget(self.mode_note_label)
+        options_card_lay.addWidget(self.mode_note_label)
+        left_lay.addWidget(options_card)
         left_lay.addStretch()
 
         footer_lay = QHBoxLayout()
@@ -522,20 +565,26 @@ class App(QMainWindow):
         main_widget = QWidget()
         main_widget.setStyleSheet(f"background:{C_BG};")
         main_lay = QVBoxLayout(main_widget)
-        main_lay.setContentsMargins(20, 20, 20, 20)
-        main_lay.setSpacing(18)
+        main_lay.setContentsMargins(22, 20, 22, 22)
+        main_lay.setSpacing(14)
 
         self.main_page_title = QLabel()
-        self.main_page_title.setStyleSheet(f"font-size:24px; font-weight:700; color:{C_TEXT};")
+        self.main_page_title.setObjectName("pageTitle")
         main_lay.addWidget(self.main_page_title)
 
         self.main_page_desc = QLabel()
-        self.main_page_desc.setObjectName("noteLabel")
+        self.main_page_desc.setObjectName("pageDescription")
         self.main_page_desc.setWordWrap(True)
         main_lay.addWidget(self.main_page_desc)
 
+        main_target_card = QWidget()
+        main_target_card.setObjectName("contentCard")
+        main_target_card_lay = QVBoxLayout(main_target_card)
+        main_target_card_lay.setContentsMargins(16, 14, 16, 16)
+        main_target_card_lay.setSpacing(10)
+
         self.main_output_section_label = _section_label("")
-        main_lay.addWidget(self.main_output_section_label)
+        main_target_card_lay.addWidget(self.main_output_section_label)
 
         main_out_row = QHBoxLayout()
         self.main_output_input = QLineEdit()
@@ -548,31 +597,37 @@ class App(QMainWindow):
         self.main_output_btn.setCursor(Qt.PointingHandCursor)
         self.main_output_btn.clicked.connect(self.choose_main_output_folder)
         main_out_row.addWidget(self.main_output_btn)
-        main_lay.addLayout(main_out_row)
+        main_target_card_lay.addLayout(main_out_row)
 
         self.main_clear_output_checkbox = QCheckBox()
         self.main_clear_output_checkbox.setChecked(True)
-        main_lay.addWidget(self.main_clear_output_checkbox)
+        main_target_card_lay.addWidget(self.main_clear_output_checkbox)
 
         self.main_remove_duplicates_checkbox = QCheckBox()
-        main_lay.addWidget(self.main_remove_duplicates_checkbox)
+        main_target_card_lay.addWidget(self.main_remove_duplicates_checkbox)
 
         self.main_safe_temp_checkbox = QCheckBox()
         self.main_safe_temp_checkbox.setChecked(True)
-        main_lay.addWidget(self.main_safe_temp_checkbox)
+        main_target_card_lay.addWidget(self.main_safe_temp_checkbox)
 
         self.main_sources_hint_label = QLabel()
         self.main_sources_hint_label.setObjectName("noteLabel")
         self.main_sources_hint_label.setWordWrap(True)
-        main_lay.addWidget(self.main_sources_hint_label)
+        main_target_card_lay.addWidget(self.main_sources_hint_label)
 
         self.main_page_note_label = QLabel()
         self.main_page_note_label.setObjectName("noteLabel")
         self.main_page_note_label.setWordWrap(True)
-        main_lay.addWidget(self.main_page_note_label)
+        main_target_card_lay.addWidget(self.main_page_note_label)
+        main_lay.addWidget(main_target_card)
 
+        self.main_import_card = QWidget()
+        self.main_import_card.setObjectName("contentCard")
+        main_import_card_lay = QVBoxLayout(self.main_import_card)
+        main_import_card_lay.setContentsMargins(16, 14, 16, 16)
+        main_import_card_lay.setSpacing(10)
         self.main_import_section_label = _section_label("")
-        main_lay.addWidget(self.main_import_section_label)
+        main_import_card_lay.addWidget(self.main_import_section_label)
 
         main_src_hdr = QHBoxLayout()
         main_src_hdr.setContentsMargins(0, 0, 0, 0)
@@ -604,7 +659,7 @@ class App(QMainWindow):
         main_src_hdr.addWidget(self.main_add_folder_btn)
         main_src_hdr.addWidget(self.main_remove_btn)
         main_src_hdr.addWidget(self.main_clear_btn)
-        main_lay.addLayout(main_src_hdr)
+        main_import_card_lay.addLayout(main_src_hdr)
 
         self.main_source_container = QWidget()
         self.main_source_container.setObjectName("sourceContainer")
@@ -631,7 +686,7 @@ class App(QMainWindow):
         self.main_rows_scroll.setWidgetResizable(True)
         self.main_rows_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.main_rows_scroll.setFrameShape(QFrame.NoFrame)
-        self.main_rows_scroll.setFixedHeight(160)
+        self.main_rows_scroll.setFixedHeight(132)
         self.main_rows_scroll.setStyleSheet("background:transparent;")
 
         self.main_rows_widget = QWidget()
@@ -648,7 +703,8 @@ class App(QMainWindow):
 
         self.main_rows_scroll.setWidget(self.main_rows_widget)
         main_source_container_lay.addWidget(self.main_rows_scroll)
-        main_lay.addWidget(self.main_source_container)
+        main_import_card_lay.addWidget(self.main_source_container)
+        main_lay.addWidget(self.main_import_card)
 
         main_lay.addStretch()
 
@@ -669,8 +725,8 @@ class App(QMainWindow):
 
         right_panel = QWidget()
         right_panel.setObjectName("rightPanel")
-        right_panel.setMinimumWidth(260)
-        right_panel.setMaximumWidth(320)
+        right_panel.setMinimumWidth(330)
+        right_panel.setMaximumWidth(410)
         rp_lay = QVBoxLayout(right_panel)
         rp_lay.setContentsMargins(0, 0, 0, 0)
         rp_lay.setSpacing(0)
@@ -678,8 +734,18 @@ class App(QMainWindow):
         btn_area = QWidget()
         btn_area.setStyleSheet(f"background:{C_SURFACE};")
         btn_area_lay = QVBoxLayout(btn_area)
-        btn_area_lay.setContentsMargins(16, 16, 16, 16)
-        btn_area_lay.setSpacing(0)
+        btn_area_lay.setContentsMargins(18, 18, 18, 18)
+        btn_area_lay.setSpacing(7)
+
+        self.run_title_label = QLabel()
+        self.run_title_label.setObjectName("runTitle")
+        btn_area_lay.addWidget(self.run_title_label)
+
+        self.run_summary_label = QLabel()
+        self.run_summary_label.setObjectName("runSummary")
+        self.run_summary_label.setWordWrap(True)
+        btn_area_lay.addWidget(self.run_summary_label)
+        btn_area_lay.addSpacing(6)
 
         self.start_btn = QPushButton()
         self.start_btn.setObjectName("startBtn")
@@ -745,7 +811,9 @@ class App(QMainWindow):
         rp_lay.addWidget(self.log_text, 1)
 
         splitter.addWidget(right_panel)
-        splitter.setSizes([860, 300])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
+        splitter.setSizes([900, 380])
 
         self._retranslate_ui()
         self._set_output_path("")
@@ -774,13 +842,15 @@ class App(QMainWindow):
             self.lang_selector.setCurrentIndex(self.lang_selector.findData(current_code))
         self.lang_selector.blockSignals(False)
 
-        self.source_section_label.setText(self.t("section_input").upper())
-        self.output_section_label.setText(self.t("section_output").upper())
-        self.mode_section_label.setText(self.t("section_mode").upper())
-        self.opt_section_label.setText(self.t("section_options").upper())
+        self.source_section_label.setText("1  " + self.t("section_input").upper())
+        self.output_section_label.setText("2  " + self.t("section_output").upper())
+        self.mode_section_label.setText("3  " + self.t("section_mode").upper())
+        self.opt_section_label.setText("4  " + self.t("section_options").upper())
         self.log_section_label.setText(self.t("section_log").upper())
         self.main_output_section_label.setText(self.t("main_page_target").upper())
         self.main_import_section_label.setText(self.t("main_page_import_section").upper())
+        self.merge_page_title.setText(self.t("merge_page_title"))
+        self.merge_page_desc.setText(self.t("merge_page_desc"))
 
         self.page_btn_merge.setText(self.t("page_mode_merge"))
         self.page_btn_main.setText(self.t("page_mode_main_folder"))
@@ -846,6 +916,7 @@ class App(QMainWindow):
 
         self._refresh_empty_label()
         self._apply_workflow_button_state()
+        self._refresh_run_summary()
 
     def _refresh_title_desc(self):
         if not self._title_desc_full:
@@ -865,6 +936,7 @@ class App(QMainWindow):
             self.empty_label.hide()
         self._refresh_main_empty_label()
         self._refresh_main_sources_hint()
+        self._refresh_run_summary()
 
     def _refresh_main_empty_label(self):
         if not self.main_input_entries:
@@ -974,6 +1046,7 @@ class App(QMainWindow):
         self._current_mode = mode_key
         for key, card in self.mode_cards.items():
             card.set_selected(key == mode_key)
+        self._refresh_run_summary()
 
     def _selected_mode(self) -> str:
         return self._current_mode
@@ -988,6 +1061,7 @@ class App(QMainWindow):
 
     def _apply_main_page_mode_state(self):
         is_inside = self._current_workflow == WORKFLOW_INSIDE_FOLDER
+        self.main_import_card.setVisible(not is_inside)
         self.main_sources_hint_label.setVisible(not is_inside)
         self.main_import_section_label.setVisible(not is_inside)
         self.main_source_container.setVisible(not is_inside)
@@ -1008,11 +1082,46 @@ class App(QMainWindow):
         self._apply_main_page_mode_state()
         self._retranslate_ui()
         self._apply_workflow_button_state()
+        self._refresh_run_summary()
 
     def _set_output_path(self, path_text: str):
         self._output_path = path_text.strip()
         self.output_input.setText(self._output_path)
         self.main_output_input.setText(self._output_path)
+        self._refresh_run_summary()
+
+    def _refresh_run_summary(self):
+        if not hasattr(self, "run_title_label"):
+            return
+
+        workflow_names = {
+            WORKFLOW_MERGE: self.t("page_mode_merge"),
+            WORKFLOW_MAIN_FOLDER: self.t("page_mode_main_folder"),
+            WORKFLOW_INSIDE_FOLDER: self.t("page_mode_inside_folder"),
+        }
+        self.run_title_label.setText(workflow_names.get(self._current_workflow, ""))
+
+        is_ready = bool(self._output_path) and (
+            self._current_workflow != WORKFLOW_MERGE or bool(self.input_entries)
+        )
+        if not self.is_running:
+            self.start_btn.setEnabled(is_ready)
+
+        if not self._output_path:
+            self.run_summary_label.setText(self.t("run_select_output"))
+        elif self._current_workflow == WORKFLOW_MERGE:
+            if self.input_entries:
+                self.run_summary_label.setText(
+                    self.t("run_ready_merge", count=len(self.input_entries))
+                )
+            else:
+                self.run_summary_label.setText(self.t("run_add_source"))
+        elif self._current_workflow == WORKFLOW_MAIN_FOLDER:
+            self.run_summary_label.setText(
+                self.t("run_ready_main", count=len(self.main_input_entries))
+            )
+        else:
+            self.run_summary_label.setText(self.t("run_ready_inside"))
 
     def _refresh_main_sources_hint(self):
         if self.main_input_entries:
@@ -1284,10 +1393,10 @@ class App(QMainWindow):
 
     def _on_process_finished(self):
         self.is_running = False
-        self.start_btn.setEnabled(True)
         self.start_btn.setText(self.t("btn_start"))
         self.worker = None
         self.worker_thread = None
+        self._refresh_run_summary()
 
     def _on_worker_process_done(self):
         QMessageBox.information(self, self.t("app_title"), self.t("msg_done"))

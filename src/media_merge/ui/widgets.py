@@ -37,16 +37,27 @@ class ModeCard(QWidget):
         super().__init__(parent)
         self.mode_key = mode_key
         self._selected = False
+        self.setObjectName("modeCard")
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedHeight(120)
+        self.setFixedHeight(108)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 12, 14, 12)
-        lay.setSpacing(6)
+        lay.setContentsMargins(16, 13, 16, 13)
+        lay.setSpacing(7)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(8)
         self.title_lbl = QLabel(title)
         self.title_lbl.setStyleSheet(f"font-size:17px; font-weight:700; color:{C_TEXT};")
-        lay.addWidget(self.title_lbl)
+        self.title_lbl.setWordWrap(True)
+        title_row.addWidget(self.title_lbl, 1)
+
+        self.selected_lbl = QLabel("")
+        self.selected_lbl.setFixedSize(18, 18)
+        self.selected_lbl.setAlignment(Qt.AlignCenter)
+        title_row.addWidget(self.selected_lbl, 0, Qt.AlignTop)
+        lay.addLayout(title_row)
 
         self.desc_lbl = QLabel(desc)
         self.desc_lbl.setWordWrap(True)
@@ -54,23 +65,36 @@ class ModeCard(QWidget):
         lay.addWidget(self.desc_lbl)
         lay.addStretch()
 
-        self._refresh_style()
+        self.set_selected(False)
 
     def set_selected(self, selected: bool):
         self._selected = selected
         self._refresh_style()
         if selected:
             self.title_lbl.setStyleSheet(f"font-size:17px; font-weight:700; color:{C_ACCENT};")
+            self.selected_lbl.setText("OK")
+            self.selected_lbl.setStyleSheet(
+                f"font-size:8px; font-weight:800; color:#ffffff; background:{C_ACCENT};"
+                " border-radius:9px;"
+            )
         else:
             self.title_lbl.setStyleSheet(f"font-size:17px; font-weight:700; color:{C_TEXT};")
+            self.selected_lbl.setText("")
+            self.selected_lbl.setStyleSheet(
+                f"background:{C_SURFACE2}; border:1px solid {C_BORDER2}; border-radius:9px;"
+            )
 
     def _refresh_style(self):
         if self._selected:
             self.setStyleSheet(
-                f"background:{C_ACCENT_DIM}; border:2px solid {C_ACCENT}; border-radius:10px;"
+                f"QWidget#modeCard {{ background:{C_ACCENT_DIM}; border:2px solid {C_ACCENT};"
+                " border-radius:12px; }"
             )
         else:
-            self.setStyleSheet(f"background:{C_SURFACE}; border:1px solid {C_BORDER2}; border-radius:10px;")
+            self.setStyleSheet(
+                f"QWidget#modeCard {{ background:{C_SURFACE}; border:1px solid {C_BORDER2};"
+                " border-radius:12px; }"
+            )
 
     def mousePressEvent(self, _event):
         self.clicked.emit(self.mode_key)
