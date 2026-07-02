@@ -39,6 +39,7 @@
   "mode_desc_move": "No copy kept",
   "mode_desc_main_folder": "Use output as main folder, re-index existing files, and merge new files in",
   "opt_clear_output": "Clear existing media in output before starting",
+  "opt_allow_duplicates": "Allow duplicate files (do not skip matching content)",
   "opt_safe_temp_workspace": "Safe mode: process in temp workspace and apply at the end",
   "opt_remove_duplicates": "Remove duplicate files by content (inside organizer mode)",
   "mode_note": "Notes: Duplicate files are skipped when both file hash and extension match. Names like IMG_0072 are sorted by number first. UUID-like and long-hash names are sorted by creation time.",

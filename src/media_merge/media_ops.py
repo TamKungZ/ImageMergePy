@@ -279,6 +279,7 @@ def process_media(
     mode: str,
     clear_output_first: bool,
     remove_duplicates_in_place: bool,
+    allow_duplicate_files: bool,
     use_safe_temp_workspace: bool,
     logger: Logger,
     tr=t_identity,
@@ -349,7 +350,7 @@ def process_media(
         skipped = 0
         deleted_sources = 0
         failed = 0
-        if remove_duplicates_in_place:
+        if remove_duplicates_in_place and not allow_duplicate_files:
             seen_hashes: set[tuple[str, str]] = set()
             for file_path in ordered_files:
                 try:
@@ -405,8 +406,12 @@ def process_media(
     deleted_sources = 0
     failed = 0
     current_index = len(existing_output_files)
+    existing_output_paths = set(existing_output_files)
 
     for file_path, _ctime, prefix in source_items:
+        if allow_duplicate_files and mode == MODE_MAIN_FOLDER and file_path in existing_output_paths:
+            continue
+
         try:
             file_hash = sha256_file(file_path)
         except Exception as exc:
@@ -417,7 +422,7 @@ def process_media(
         ext = file_path.suffix.lower()
         file_key = dedupe_key(file_hash, ext)
 
-        if file_key in existing_hashes:
+        if (not allow_duplicate_files) and file_key in existing_hashes:
             skipped += 1
             logger.write(tr("log_duplicate_skip", path=file_path))
             if mode in {MODE_MOVE, MODE_COPY_DELETE}:

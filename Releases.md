@@ -1,3 +1,29 @@
+Tag: v1.1.2
+Release title: v1.1.2 - Optional Duplicate Import
+Release notes:
+## ImageMerge v1.1.2
+
+Update focused on giving every workflow explicit control over duplicate handling.
+
+### Highlights
+- Added an **Allow duplicate files** checkbox to the Merge workflow options
+- Added the same duplicate-import option to Main Folder and Inside Folder Organizer workflows
+- When enabled, files with matching hash + extension are no longer skipped and are still sorted and renamed normally
+- Main Folder workflow avoids copying existing output files back onto themselves while still allowing duplicate imports from selected folders
+- Inside Folder Organizer now disables duplicate removal behavior when duplicate files are explicitly allowed
+- Added CLI support with `--allow-duplicates`
+- Added English and Thai localization strings for the new option
+- Updated executable metadata version to `1.1.2.0`
+
+### Verification
+- `python -m compileall MainApp.py src`
+- `git diff --check`
+
+### License
+This project remains open-source under the **MIT License**.
+
+---
+
 Tag: v1.1.1
 Release title: v1.1.1 - Streamlined UI + 16:9 Window
 Release notes:

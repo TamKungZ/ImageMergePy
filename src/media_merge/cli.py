@@ -44,6 +44,8 @@ def create_cli_parser() -> argparse.ArgumentParser:
                         help="Clear media files in output before processing")
     parser.add_argument("--remove-duplicates", action="store_true",
                         help="Inside organizer: remove duplicate files by content hash + extension")
+    parser.add_argument("--allow-duplicates", action="store_true",
+                        help="Import duplicate files instead of skipping matching content")
     parser.add_argument("--no-safe-temp", action="store_true",
                         help="Disable safe temp workspace staging and write directly to output")
     parser.add_argument("--lang", default="", choices=sorted(SUPPORTED_LANGS), help="CLI log language")
@@ -76,6 +78,7 @@ def run_cli(argv: list[str]) -> int:
         mode=args.mode,
         clear_output_first=args.clear_output,
         remove_duplicates_in_place=args.remove_duplicates,
+        allow_duplicate_files=args.allow_duplicates,
         use_safe_temp_workspace=(not args.no_safe_temp),
         logger=logger,
         tr=tr,

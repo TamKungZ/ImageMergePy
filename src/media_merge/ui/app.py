@@ -531,6 +531,9 @@ class App(QMainWindow):
         self.clear_output_checkbox.setChecked(True)
         options_card_lay.addWidget(self.clear_output_checkbox)
 
+        self.allow_duplicates_checkbox = QCheckBox()
+        options_card_lay.addWidget(self.allow_duplicates_checkbox)
+
         self.safe_temp_checkbox = QCheckBox()
         self.safe_temp_checkbox.setChecked(True)
         options_card_lay.addWidget(self.safe_temp_checkbox)
@@ -605,6 +608,10 @@ class App(QMainWindow):
 
         self.main_remove_duplicates_checkbox = QCheckBox()
         main_target_card_lay.addWidget(self.main_remove_duplicates_checkbox)
+
+        self.main_allow_duplicates_checkbox = QCheckBox()
+        self.main_allow_duplicates_checkbox.stateChanged.connect(self._sync_duplicate_option_state)
+        main_target_card_lay.addWidget(self.main_allow_duplicates_checkbox)
 
         self.main_safe_temp_checkbox = QCheckBox()
         self.main_safe_temp_checkbox.setChecked(True)
@@ -892,6 +899,8 @@ class App(QMainWindow):
 
         self.clear_output_checkbox.setText(self.t("opt_clear_output"))
         self.main_clear_output_checkbox.setText(self.t("opt_clear_output"))
+        self.allow_duplicates_checkbox.setText(self.t("opt_allow_duplicates"))
+        self.main_allow_duplicates_checkbox.setText(self.t("opt_allow_duplicates"))
         self.safe_temp_checkbox.setText(self.t("opt_safe_temp_workspace"))
         self.main_safe_temp_checkbox.setText(self.t("opt_safe_temp_workspace"))
         self.main_remove_duplicates_checkbox.setText(self.t("opt_remove_duplicates"))
@@ -1073,6 +1082,13 @@ class App(QMainWindow):
         self.main_clear_btn.setEnabled(not is_inside)
         self.main_clear_output_checkbox.setVisible(not is_inside)
         self.main_remove_duplicates_checkbox.setVisible(is_inside)
+        self._sync_duplicate_option_state()
+
+    def _sync_duplicate_option_state(self):
+        if not hasattr(self, "main_remove_duplicates_checkbox"):
+            return
+        allow_duplicates = self.main_allow_duplicates_checkbox.isChecked()
+        self.main_remove_duplicates_checkbox.setEnabled(not allow_duplicates)
 
     def _set_workflow(self, workflow: str):
         if workflow not in {WORKFLOW_MERGE, WORKFLOW_MAIN_FOLDER, WORKFLOW_INSIDE_FOLDER}:
@@ -1316,18 +1332,23 @@ class App(QMainWindow):
             mode = MODE_MAIN_FOLDER
             clear_output_first = self.main_clear_output_checkbox.isChecked()
             remove_duplicates_in_place = False
+            allow_duplicate_files = self.main_allow_duplicates_checkbox.isChecked()
             use_safe_temp_workspace = self.main_safe_temp_checkbox.isChecked()
             input_configs = [{"path": e["path"], "prefix": ""} for e in self.main_input_entries]
         elif self._current_workflow == WORKFLOW_INSIDE_FOLDER:
             mode = MODE_INSIDE_FOLDER
             clear_output_first = False
-            remove_duplicates_in_place = self.main_remove_duplicates_checkbox.isChecked()
+            allow_duplicate_files = self.main_allow_duplicates_checkbox.isChecked()
+            remove_duplicates_in_place = (
+                self.main_remove_duplicates_checkbox.isChecked() and not allow_duplicate_files
+            )
             use_safe_temp_workspace = self.main_safe_temp_checkbox.isChecked()
             input_configs = []
         else:
             mode = self._selected_mode()
             clear_output_first = self.clear_output_checkbox.isChecked()
             remove_duplicates_in_place = False
+            allow_duplicate_files = self.allow_duplicates_checkbox.isChecked()
             use_safe_temp_workspace = self.safe_temp_checkbox.isChecked()
 
         if self._current_workflow == WORKFLOW_MERGE and not input_configs:
@@ -1356,6 +1377,7 @@ class App(QMainWindow):
             mode,
             clear_output_first,
             remove_duplicates_in_place,
+            allow_duplicate_files,
             use_safe_temp_workspace,
             self.t,
         )
