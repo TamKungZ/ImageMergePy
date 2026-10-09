@@ -441,7 +441,7 @@ jobs:
           if (-not (Test-Path "app_metadata.json")) { throw "Missing app_metadata.json" }
           $meta = Get-Content "app_metadata.json" -Raw | ConvertFrom-Json
           $productVersionRaw = [string]$meta.product_version
-          if ([string]::IsNullOrWhiteSpace($productVersionRaw)) { $productVersionRaw = "1.0.1.0" }
+          if ([string]::IsNullOrWhiteSpace($productVersionRaw)) { $productVersionRaw = "2.0.0.0" }
 
           $versionParts = $productVersionRaw.Split('.')
           while ($versionParts.Count -lt 3) { $versionParts += "0" }

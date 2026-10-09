@@ -2,7 +2,7 @@
 
 A GUI tool to merge images/videos from multiple folders, remove duplicates with SHA-256, and rename files into a clean sequential format.
 
-Current app version: `1.1.0`
+Current app version: `2.0.0`
 
 ## Features
 
