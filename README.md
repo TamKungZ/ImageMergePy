@@ -15,29 +15,38 @@ and renames the results into an ordered sequence.
 
 ## Sort priority
 
-For a merge into an empty output folder, the rules below are applied from
-highest to lowest priority. A lower rule is checked only when the files tie on
-the rules above it. This means a `.png` always comes before a `.jpg`, even if
-the JPG has a smaller filename number or is in an earlier input folder.
+For **Merge** (copy/move from input folders), follow the tree from top to
+bottom. A lower branch is considered only after all higher branches tie:
 
-1. **Media type:** all images come before all videos.
-2. **Extension:** files are grouped in this order:
-   - Images: `.png` → `.jpg` → `.jpeg` → `.webp` → `.bmp` → `.gif` → `.tiff`
-   - Videos: `.mp4` → `.mov` → `.mkv` → `.avi` → `.webm` → `.m4v` → `.wmv` → `.flv` → `.ts` → `.mts`
-3. **Filename group, within the same extension:**
-   1. `IMG` names with numbers, such as `IMG_2` and `IMG_10`
-   2. UUID- or hash-style names
-   3. Other names
-4. **Order inside that filename group:**
-   - `IMG` names: the number in the name, numerically (`IMG_2` before `IMG_10`)
-   - UUID/hash names: file time, then name to break ties
-   - Other names: leading number, numerically; then duplicate suffix such as
-     `(1)`; then file time and name to break ties
-5. **Output numbering:** after sorting, names are numbered continuously from
-   `0001`; numbering does not restart for another extension or input folder.
+```text
+Priority 1: Media type
+├─ Images
+└─ Videos                         (all images come first)
 
-The input folder's position and its prefix do **not** affect sort order. A
-prefix is added to the resulting filename only.
+Priority 2: Extension             (compare only within the same media type)
+├─ Images: .png → .jpg → .jpeg → .webp → .bmp → .gif → .tiff
+└─ Videos: .mp4 → .mov → .mkv → .avi → .webm → .m4v → .wmv → .flv → .ts → .mts
+
+Priority 3: Filename group        (compare only within the same extension)
+├─ IMG + number (IMG_2, IMG_10)
+├─ UUID/hash-style name
+└─ Other names
+
+Priority 4: Order within group
+├─ IMG + number: number → file timestamp → name
+├─ UUID/hash:    file timestamp → name
+└─ Other names:  leading number → duplicate suffix (1) → file timestamp → name
+```
+
+Numbers are compared numerically (`2` before `10`); timestamps are oldest
+first. For Merge, the timestamp is the OS file `ctime` (its exact meaning can
+vary by OS). So the effective priority is **media type → extension → filename
+group → number (where applicable) → date (where applicable) → name**. Date is
+not checked before file type or extension. Input-folder order and prefix do
+not change sorting; prefix is only added to the output name.
+
+After sorting, output numbering runs continuously from `0001` across extensions
+and input folders.
 
 Example input:
 
@@ -63,10 +72,15 @@ more-0005.jpg   # more/3.jpg
 more-0006.mp4   # more/2.mp4
 ```
 
-For organizer modes, the within-extension rule differs: existing sequence
-numbers determine order in `main_folder`; in `inside_folder`, file modification
-time determines order. Images still precede videos and extension priority still
-comes before either rule.
+Organizer modes use their own within-extension rule:
+
+```text
+main_folder:   media type → extension → existing sequence number → duplicate suffix → name
+inside_folder: media type → extension → file modification time → sequence number → name
+```
+
+For both modes, images come before videos and extensions follow the same fixed
+order listed above. Dates are oldest first.
 
 ## Download and install
 
