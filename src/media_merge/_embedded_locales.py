@@ -296,7 +296,14 @@ EMBEDDED_LOCALES = {
         "log_deleted_sources": "Deleted sources: {count}",
         "log_failed": "Failed: {count}",
         "log_total_output": "Total output files: {count}",
-        "log_done": "Done"
+        "log_done": "Done",
+        "btn_cancel": "Cancel",
+        "status_cancelling": "Cancelling...",
+        "msg_cancelled": "Cancelled.",
+        "msg_busy_close": "A job is still running. Cancel it and close the app?",
+        "log_cancelled_safe": "Cancelled. Safe mode discarded all staged changes; nothing was modified.",
+        "log_cancelled_partial": "Cancelled. Changes already applied were kept (safe mode was off).",
+        "error_output_inside_input": "Output folder cannot be inside an input folder."
     },
     "es": {
         "app_title": "ImageMerge",
@@ -990,7 +997,14 @@ EMBEDDED_LOCALES = {
         "log_deleted_sources": "ลบต้นฉบับ: {count}",
         "log_failed": "ผิดพลาด: {count}",
         "log_total_output": "รวม output ตอนนี้: {count} ไฟล์",
-        "log_done": "เสร็จแล้ว"
+        "log_done": "เสร็จแล้ว",
+        "btn_cancel": "ยกเลิก",
+        "status_cancelling": "กำลังยกเลิก...",
+        "msg_cancelled": "ยกเลิกแล้ว",
+        "msg_busy_close": "ยังประมวลผลอยู่ ต้องการยกเลิกงานและปิดโปรแกรมหรือไม่?",
+        "log_cancelled_safe": "ยกเลิกแล้ว Safe mode ทิ้งการเปลี่ยนแปลงทั้งหมด ไม่มีไฟล์ถูกแก้ไข",
+        "log_cancelled_partial": "ยกเลิกแล้ว การเปลี่ยนแปลงที่ทำไปแล้วจะคงอยู่ (ปิด Safe mode ไว้)",
+        "error_output_inside_input": "โฟลเดอร์ปลายทางต้องไม่อยู่ภายในโฟลเดอร์ต้นทาง"
     },
     "vi": {
         "app_title": "ImageMerge",

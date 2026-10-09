@@ -1,10 +1,18 @@
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
-from ..config import (
+from .theme import (
     C_ACCENT,
     C_ACCENT_DIM,
-    C_BORDER,
     C_BORDER2,
     C_DANGER,
     C_SURFACE,
@@ -250,3 +258,48 @@ class StatCard(QWidget):
         self.label_lbl.setText(text.upper())
 
 
+PRIMARY_BTN_STYLE = (
+    "QPushButton { background:#1b1b1b; color:#ffffff; border:1px solid #1b1b1b; border-radius:7px; padding:8px 14px; font-size:14px; font-weight:600; }"
+    "QPushButton:hover { background:#000000; border-color:#000000; }"
+    "QPushButton:pressed { background:#343434; border-color:#343434; }"
+    "QPushButton:disabled { background:#4a4a4a; color:#f2f2f2; border-color:#4a4a4a; }"
+)
+
+START_BTN_STYLE = (
+    "QPushButton { background:#111111; color:#ffffff; border:1px solid #111111; border-radius:10px; font-size:20px; font-weight:700; padding:14px; }"
+    "QPushButton:hover { background:#242424; border-color:#242424; }"
+    "QPushButton:pressed { background:#000000; border-color:#000000; }"
+    "QPushButton:disabled { background:#4a4a4a; color:#f2f2f2; border-color:#4a4a4a; }"
+)
+
+
+def make_button(object_name: str, handler=None, enabled: bool = True, style: str | None = None) -> QPushButton:
+    btn = QPushButton()
+    btn.setObjectName(object_name)
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setEnabled(enabled)
+    if style:
+        btn.setStyleSheet(style)
+    if handler is not None:
+        btn.clicked.connect(handler)
+    return btn
+
+
+def make_card(spacing: int = 12) -> tuple[QWidget, QVBoxLayout]:
+    card = QWidget()
+    card.setObjectName("contentCard")
+    lay = QVBoxLayout(card)
+    lay.setContentsMargins(16, 14, 16, 16)
+    lay.setSpacing(spacing)
+    return card, lay
+
+
+def make_output_row(on_choose) -> tuple[QHBoxLayout, QLineEdit, QPushButton]:
+    row = QHBoxLayout()
+    edit = QLineEdit()
+    edit.setObjectName("outputPath")
+    edit.setReadOnly(True)
+    row.addWidget(edit)
+    button = make_button("ghostBtn", handler=on_choose)
+    row.addWidget(button)
+    return row, edit, button

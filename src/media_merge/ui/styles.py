@@ -1,5 +1,5 @@
 
-from ..config import (
+from .theme import (
     C_ACCENT,
     C_ACCENT_DIM,
     C_BG,

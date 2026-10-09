@@ -96,5 +96,12 @@
   "log_deleted_sources": "Deleted sources: {count}",
   "log_failed": "Failed: {count}",
   "log_total_output": "Total output files: {count}",
-  "log_done": "Done"
+  "log_done": "Done",
+  "btn_cancel": "Cancel",
+  "status_cancelling": "Cancelling...",
+  "msg_cancelled": "Cancelled.",
+  "msg_busy_close": "A job is still running. Cancel it and close the app?",
+  "log_cancelled_safe": "Cancelled. Safe mode discarded all staged changes; nothing was modified.",
+  "log_cancelled_partial": "Cancelled. Changes already applied were kept (safe mode was off).",
+  "error_output_inside_input": "Output folder cannot be inside an input folder."
 }

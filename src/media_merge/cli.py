@@ -2,20 +2,20 @@ import argparse
 from pathlib import Path
 
 from .config import APP_FALLBACK_TITLE, SUPPORTED_LANGS, detect_language
-from .i18n import I18n
-from .media_ops import (
-    Logger,
+from .constants import (
     MODE_COPY_DELETE,
     MODE_COPY_KEEP,
     MODE_INSIDE_FOLDER,
     MODE_MAIN_FOLDER,
     MODE_MOVE,
-    process_media,
 )
+from .i18n import I18n
 from .media_ordering import normalize_prefix
+from .models import Logger, ProcessOptions, SourceFolder
+from .pipeline import process_media
 
 
-def parse_cli_input(entry: str) -> dict:
+def parse_cli_input(entry: str) -> SourceFolder:
     raw = entry.strip()
     if not raw:
         raise ValueError("Input entry cannot be empty")
@@ -28,9 +28,10 @@ def parse_cli_input(entry: str) -> dict:
     if not path_text.strip():
         raise ValueError("Input path cannot be empty")
 
-    path = Path(path_text).expanduser().resolve()
-    prefix = normalize_prefix(prefix_text)
-    return {"path": path, "prefix": prefix}
+    return SourceFolder(
+        path=Path(path_text).expanduser().resolve(),
+        prefix=normalize_prefix(prefix_text),
+    )
 
 
 def create_cli_parser() -> argparse.ArgumentParser:
@@ -43,7 +44,8 @@ def create_cli_parser() -> argparse.ArgumentParser:
                         help="Input folder entry, repeatable.")
     parser.add_argument("--output", default="", metavar="PATH", help="Output folder path")
     parser.add_argument("--mode", default=MODE_COPY_KEEP,
-                        choices=[MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE, MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER], help="Process mode")
+                        choices=[MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE, MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER],
+                        help="Process mode")
     parser.add_argument("--clear-output", action="store_true",
                         help="Clear media files in output before processing")
     parser.add_argument("--remove-duplicates", action="store_true",
@@ -60,16 +62,15 @@ def run_cli(argv: list[str]) -> int:
     parser = create_cli_parser()
     args = parser.parse_args(argv)
 
-    run_cli_mode = args.cli or bool(args.input) or bool(args.output)
-    if not run_cli_mode:
+    if not (args.cli or args.input or args.output):
         parser.print_help()
         return 0
 
-    if not args.input and args.mode not in {MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER}:
+    is_organizer = args.mode in {MODE_MAIN_FOLDER, MODE_INSIDE_FOLDER}
+    if not args.input and not is_organizer:
         parser.error("--input is required in CLI mode")
     if not args.output:
         parser.error("--output is required in CLI mode")
-
     if args.remove_duplicates and args.mode != MODE_INSIDE_FOLDER:
         parser.error("--remove-duplicates can only be used with --mode inside_folder")
     if args.remove_duplicates and args.allow_duplicates:
@@ -78,27 +79,22 @@ def run_cli(argv: list[str]) -> int:
         parser.error("--clear-output cannot be used with --mode inside_folder")
 
     try:
-        input_configs = [parse_cli_input(entry) for entry in args.input]
+        inputs = [parse_cli_input(entry) for entry in args.input]
     except ValueError as exc:
         parser.error(str(exc))
-    for config in input_configs:
-        if not config["path"].is_dir():
-            parser.error(f"Input path is not an existing directory: {config['path']}")
+    for folder in inputs:
+        if not folder.path.is_dir():
+            parser.error(f"Input path is not an existing directory: {folder.path}")
 
-    lang = args.lang or detect_language()
-    tr = I18n(lang).t
-    output_dir = Path(args.output).expanduser().resolve()
-    logger = Logger(lambda text: print(text, flush=True))
-
-    process_media(
-        input_dir_configs=input_configs,
-        output_dir=output_dir,
+    options = ProcessOptions(
         mode=args.mode,
+        output_dir=Path(args.output).expanduser().resolve(),
+        inputs=inputs,
         clear_output_first=args.clear_output,
         remove_duplicates_in_place=args.remove_duplicates,
         allow_duplicate_files=args.allow_duplicates,
-        use_safe_temp_workspace=(not args.no_safe_temp),
-        logger=logger,
-        tr=tr,
+        use_safe_temp_workspace=not args.no_safe_temp,
     )
+    tr = I18n(args.lang or detect_language()).t
+    process_media(options, Logger(lambda text: print(text, flush=True)), tr)
     return 0

@@ -6,16 +6,18 @@ import uuid
 from pathlib import Path
 from typing import Protocol
 
-from .config import (
+from .constants import (
     HEX_HASH_RE,
     IMAGE_EXTS,
     IMG_NUMBER_RE,
     MEDIA_EXTS,
     PREFIX_ALLOWED_RE,
+    TEMP_ROOT_NAME,
     UUID_LIKE_RE,
     VIDEO_EXTS,
 )
 from .i18n import t_identity
+from .models import SourceFolder
 
 
 class LogWriter(Protocol):
@@ -131,11 +133,12 @@ def is_video(path: Path) -> bool:
 
 
 def iter_media_files(root_dir: Path):
-    for root, _, filenames in os.walk(root_dir):
+    for root, dirnames, filenames in os.walk(root_dir):
+        dirnames[:] = [name for name in dirnames if name != TEMP_ROOT_NAME]
+        base = Path(root)
         for name in filenames:
-            file_path = Path(root) / name
-            if file_path.suffix.lower() in MEDIA_EXTS:
-                yield file_path
+            if os.path.splitext(name)[1].lower() in MEDIA_EXTS:
+                yield base / name
 
 
 def organize_output(
@@ -200,19 +203,17 @@ def organize_output(
     return renamed_files
 
 
-def collect_source_media(input_dir_configs: list[dict]) -> list[tuple[Path, float, str]]:
+def collect_source_media(folders: list[SourceFolder]) -> list[tuple[Path, float, str]]:
     image_files = []
     video_files = []
 
-    for config in input_dir_configs:
-        source_path: Path = config["path"]
-        prefix: str = config.get("prefix", "")
-        for file_path in iter_media_files(source_path):
+    for folder in folders:
+        for file_path in iter_media_files(folder.path):
             try:
                 ctime = os.path.getctime(file_path)
             except OSError:
                 ctime = 0
-            item = (file_path, ctime, prefix)
+            item = (file_path, ctime, folder.prefix)
             if is_image(file_path):
                 image_files.append(item)
             elif is_video(file_path):

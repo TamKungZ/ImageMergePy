@@ -8,6 +8,13 @@ reliable native builds.
 
 ### Highlights
 - Reorganized application and build resources to make the project easier to maintain
+- Split media processing into focused modules for shared models and constants, file operations, hashing, safe workspaces, merge processing, and in-place organization
+- Refactored the Qt interface into focused page, source-list, run-panel, dialog, font, and theme modules
+- Improved duplicate detection by checking file size and extension before hashing, then caching hashes for matching candidates
+- Safe workspace staging now uses hard links when supported, with file-copy fallback
+- Improved CLI validation for missing or invalid input folders and output paths nested inside input folders
+- Added clearer cancellation behavior and status messages in English and Thai; safe mode discards staged changes when cancelled
+- Load only the active and fallback translation catalogs, and discover available languages from locale files
 - Refreshed application icons for Windows, Linux, and macOS using the updated artwork
 - Build scripts download pinned Kanit font files and verify their SHA-256 checksums instead of storing font binaries in the repository
 - Removed the slow Windows one-file executable; Windows distribution uses an installer and a clean standalone folder package
