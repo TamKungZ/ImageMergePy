@@ -39,6 +39,8 @@ python -m pip install -r requirements.txt
 Prebuilt packages are published in GitHub Releases:
 
 - Release page: `https://github.com/TamKungZ/ImageMergePy/releases`
+- Release builds and store submissions are started manually. See
+  [version-specific release notes](Releases.md).
 
 ### Windows
 
@@ -51,8 +53,9 @@ winget install TamKungZ.ImageMerge
 
 - Download and run `ImageMerge-windows-x64.msi`
 - Or extract the standalone folder package `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
-- Microsoft Store submission asset is also generated as `ImageMergeGUI-windows-x64.msix`
-- WinGet automation is configured for package id `TamKungZ.ImageMerge`
+- Microsoft Store submission asset: `ImageMergeGUI-windows-x64.msix`
+- WinGet manifest submission is available as a manually started workflow for
+  package id `TamKungZ.ImageMerge`
 
 ### Linux
 
@@ -76,7 +79,7 @@ chmod +x ImageMerge-linux-x64.AppImage
 ```
 
 - Flatpak bundle: `ImageMerge-linux-x64.flatpak`
-- Snap artifact: `ImageMerge-linux-x64.snap` (store publishing workflow is configured)
+- Snap artifact: `ImageMerge-linux-x64.snap` (store upload is manually started)
 
 ### macOS
 
@@ -85,9 +88,11 @@ brew tap TamKungZ/tap
 brew install --cask imagemerge
 ```
 
-- App bundle zip: `ImageMerge-macos-app-arm64.zip` or `ImageMerge-macos-app-x64.zip`
+- App bundle zip: `ImageMerge-macos-app-arm64.zip` or `ImageMerge-macos-app-x64.zip` (contains `ImageMerge.app`)
 - Binary zip: `ImageMerge-macos-binary-arm64.zip` or `ImageMerge-macos-binary-x64.zip`
-- Homebrew cask publishing workflow is configured (`imagemerge`)
+- Homebrew cask update is manually started and creates a pull request for review
+- Direct-download app bundles are not currently signed or notarized; macOS
+  Gatekeeper may block them.
 
 ## Run (source)
 

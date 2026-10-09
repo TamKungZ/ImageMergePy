@@ -1,3 +1,29 @@
+Tag: v2.0.0
+Release title: v2.0.0 - Project Reorganization + Build Refresh
+Release notes:
+## ImageMerge v2.0.0
+
+A major maintenance release focused on a cleaner project structure and more
+reliable native builds.
+
+### Highlights
+- Reorganized application and build resources to make the project easier to maintain
+- Refreshed application icons for Windows, Linux, and macOS using the updated artwork
+- Build scripts download pinned Kanit font files and verify their SHA-256 checksums instead of storing font binaries in the repository
+- Removed the slow Windows one-file executable; Windows distribution uses an installer and a clean standalone folder package
+- Cleaned build output to avoid leaving unnecessary caches and intermediate files
+- Updated application version metadata to `2.0.0`
+
+### Distribution
+- Windows MSI installer, standalone ZIP, and Microsoft Store MSIX submission package
+- Linux `.deb`, `.rpm`, AppImage, Flatpak, Snap, and standalone ZIP packages
+- macOS x64 and arm64 app-bundle and standalone ZIP packages
+
+### License
+This project remains open-source under the **MIT License**.
+
+---
+
 Tag: v1.1.2
 Release title: v1.1.2 - Optional Duplicate Import
 Release notes:

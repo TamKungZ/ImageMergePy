@@ -802,6 +802,56 @@ jobs:
           merge-multiple: true
           path: release_files
 
+      - name: Checkout release notes
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          path: release_source
+
+      - name: Prepare release notes for this version
+        id: notes
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          content = Path("release_source/Releases.md").read_text(encoding="utf-8")
+          entries = list(re.finditer(r"(?m)^Tag: ([^\r\n]+)\s*$", content))
+
+          for index, entry in enumerate(entries):
+              if entry.group(1).strip() != tag:
+                  continue
+
+              end = entries[index + 1].start() if index + 1 < len(entries) else len(content)
+              section = content[entry.start():end]
+              title_match = re.search(r"(?m)^Release title: ([^\r\n]+)\s*$", section)
+              notes_match = re.search(r"(?m)^Release notes:\s*$", section)
+              if title_match is None or notes_match is None:
+                  raise SystemExit(f"{tag} must include Release title and Release notes in Releases.md")
+
+              note_lines = section[notes_match.end():].splitlines()
+              while note_lines and not note_lines[-1].strip():
+                  note_lines.pop()
+              if note_lines and note_lines[-1].strip() == "---":
+                  note_lines.pop()
+              notes = "\n".join(note_lines).strip()
+              if not notes:
+                  raise SystemExit(f"No release notes found for {tag} in Releases.md")
+
+              Path("release_notes.md").write_text(notes + "\n", encoding="utf-8")
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write(f"name={title_match.group(1).strip()}\n")
+              print(f"Prepared release title and notes for {tag}.")
+              break
+          else:
+              raise SystemExit(f"No entry for {tag} found in Releases.md")
+          PY
+
       - name: Generate SHA256 checksums
         shell: bash
         run: |
@@ -852,6 +902,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
+          name: ${{ steps.notes.outputs.name }}
           draft: true
-          generate_release_notes: true
+          body_path: release_notes.md
           files: release_files/*
