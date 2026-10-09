@@ -1,3 +1,4 @@
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (
@@ -19,16 +20,22 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import (
+    APP_FALLBACK_TITLE,
     C_ACCENT,
+    C_ACCENT_DIM,
     C_BG,
+    C_BORDER,
+    C_BORDER2,
     C_DANGER,
     C_SUCCESS,
     C_SURFACE,
     C_SURFACE2,
+    C_SURFACE3,
     C_TEXT,
     C_TEXT2,
     C_TEXT3,
     C_WARNING,
+    LANGUAGE_NATIVE_NAMES,
     WORKFLOW_INSIDE_FOLDER,
     WORKFLOW_MAIN_FOLDER,
     WORKFLOW_MERGE,
@@ -38,11 +45,9 @@ from ..media_ops import (
     MODE_COPY_KEEP,
     MODE_MOVE,
 )
-from .localization import AppLocalizationMixin
-from .styles import global_stylesheet
 from .widgets import ModeCard, StatCard, _h_sep, _section_label
 
-class AppLayoutMixin(AppLocalizationMixin):
+class AppLayoutMixin:
     def _apply_dark_palette(self):
         app = QApplication.instance()
         palette = QPalette()
@@ -71,8 +76,155 @@ class AppLayoutMixin(AppLocalizationMixin):
         app_font.setStyleStrategy(QFont.PreferAntialias)
         app.setFont(app_font)
 
+    def _global_stylesheet(self) -> str:
+        ff = self.font_family
+        return f"""
+        * {{ font-family: "{ff}"; }}
+        QMainWindow, QWidget#central {{ background: {C_BG}; }}
+
+        /* Titlebar */
+        QWidget#titlebar {{ background: {C_SURFACE}; border-bottom: 1px solid {C_BORDER2}; }}
+        QWidget#workflowBar {{ background: {C_SURFACE}; border-bottom: 1px solid {C_BORDER2}; }}
+        QWidget#contentCard {{
+            background: {C_SURFACE};
+            border: 1px solid {C_BORDER2};
+            border-radius: 12px;
+        }}
+        QLabel#pageTitle {{ color:{C_TEXT}; font-size:24px; font-weight:700; }}
+        QLabel#pageDescription {{ color:{C_TEXT3}; font-size:13px; }}
+        QLabel#runTitle {{ color:{C_TEXT}; font-size:18px; font-weight:700; }}
+        QLabel#runSummary {{ color:{C_TEXT3}; font-size:13px; }}
+
+        /* Scroll areas */
+        QScrollArea {{ background: transparent; border: none; }}
+        QScrollBar:vertical {{ background: transparent; width: 8px; margin: 0; }}
+        QScrollBar::handle:vertical {{ background: {C_SURFACE3}; border-radius: 4px; min-height: 28px; }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
+
+        /* Source list container */
+        QWidget#sourceContainer {{ background: {C_SURFACE}; border: 1px solid {C_BORDER2}; border-radius: 10px; }}
+        QWidget#sourceHeaderBar  {{ background: transparent; border-bottom: 1px solid {C_BORDER2}; }}
+
+        /* Output path input */
+        QLineEdit#outputPath {{
+            background: {C_SURFACE}; border: 1px solid {C_BORDER2}; border-radius: 8px;
+            color: {C_TEXT}; padding: 10px 12px; font-size: 15px;
+        }}
+        QLineEdit#outputPath:focus {{ border-color: {C_ACCENT}; }}
+
+        QComboBox#langSelector {{
+            background: {C_SURFACE2};
+            color: {C_TEXT};
+            border: 1px solid {C_BORDER2};
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 13px;
+            min-width: 92px;
+        }}
+        QComboBox#langSelector::drop-down {{ border: none; width: 22px; }}
+        QComboBox#langSelector QAbstractItemView {{
+            border: 1px solid {C_BORDER2};
+            background: {C_SURFACE};
+            color: {C_TEXT};
+            selection-background-color: {C_ACCENT_DIM};
+        }}
+
+        QPushButton#infoBtn {{
+            background: {C_SURFACE2};
+            color: {C_TEXT2};
+            border: 1px solid {C_BORDER2};
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            min-width: 28px;
+            min-height: 28px;
+            max-width: 28px;
+            max-height: 28px;
+        }}
+        QPushButton#infoBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; border-color: {C_ACCENT}; }}
+        QPushButton#infoBtn:pressed {{ background: {C_ACCENT_DIM}; }}
+
+        /* Log area */
+        QTextEdit#logText {{
+            background: {C_SURFACE}; border: none; border-radius: 0;
+            color: {C_TEXT2}; font-size: 13px;
+            font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "Courier New", monospace;
+        }}
+
+        /* Right panel */
+        QWidget#rightPanel {{ background: {C_SURFACE}; border-left: 1px solid {C_BORDER2}; }}
+
+        /* Start button */
+        QPushButton#startBtn {{
+            background: {C_ACCENT}; color: #ffffff; border: none;
+            border-radius: 10px; font-size: 20px; font-weight: 700; padding: 14px;
+        }}
+        QPushButton#startBtn:hover {{ background: #242424; }}
+        QPushButton#startBtn:pressed {{ background: #000000; }}
+        QPushButton#startBtn:disabled {{
+            background: #4a4a4a; color: #f2f2f2; border: 1px solid #4a4a4a;
+        }}
+
+        /* Secondary buttons */
+        QPushButton#primaryBtn {{
+            background-color: #1b1b1b; color: #ffffff; border: 1px solid #1b1b1b;
+            border-radius: 7px; padding: 8px 14px; font-size: 14px; font-weight: 600;
+        }}
+        QPushButton#primaryBtn:hover {{ background-color: #000000; border-color: #000000; }}
+        QPushButton#primaryBtn:pressed {{ background-color: #343434; border-color: #343434; }}
+        QPushButton#primaryBtn:disabled {{ background-color: #4a4a4a; color: #f2f2f2; border-color: #4a4a4a; }}
+
+        QPushButton#ghostBtn {{
+            background: {C_SURFACE2}; color: {C_TEXT}; border: 1px solid {C_BORDER2};
+            border-radius: 7px; padding: 8px 12px; font-size: 14px;
+        }}
+        QPushButton#ghostBtn:hover {{ background: {C_SURFACE3}; }}
+        QPushButton#ghostBtn:disabled {{ color: {C_TEXT3}; }}
+
+        QPushButton#dangerGhostBtn {{
+            background: transparent; color: {C_TEXT3}; border: 1px solid {C_BORDER};
+            border-radius: 7px; padding: 8px 12px; font-size: 14px;
+        }}
+        QPushButton#dangerGhostBtn:hover {{ background: rgba(20,20,20,0.08); color: {C_DANGER}; border-color: {C_BORDER2}; }}
+        QPushButton#dangerGhostBtn:disabled {{ color: {C_TEXT3}; }}
+
+        QPushButton#tinyBtn {{
+            background: transparent; color: {C_TEXT3}; border: none;
+            border-radius: 5px; padding: 3px 8px; font-size: 12px;
+        }}
+        QPushButton#tinyBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
+
+        QPushButton#pageModeBtn {{
+            background: transparent; color: {C_TEXT2}; border: 1px solid transparent;
+            border-radius: 9px; padding: 9px 14px; font-size: 13px; font-weight: 600;
+        }}
+        QPushButton#pageModeBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
+        QPushButton#pageModeBtn[active="true"] {{
+            background: {C_ACCENT}; color: #ffffff; border: 1px solid {C_ACCENT};
+        }}
+
+        /* Checkbox */
+        QCheckBox {{ color: {C_TEXT2}; font-size: 14px; spacing: 8px; }}
+        QCheckBox::indicator {{
+            width: 18px; height: 18px; border-radius: 4px;
+            border: 1.5px solid {C_BORDER2}; background: {C_SURFACE};
+        }}
+        QCheckBox::indicator:checked {{
+            background: {C_ACCENT}; border-color: {C_ACCENT};
+            image: none;
+        }}
+        QCheckBox::indicator:hover {{ border-color: {C_ACCENT}; }}
+
+        /* Splitter */
+        QSplitter::handle {{ background: {C_BORDER2}; width: 1px; }}
+
+        /* Note label */
+        QLabel#noteLabel {{ color: {C_TEXT3}; font-size: 13px; line-height: 1.5; }}
+        """
+
     def _build_ui(self):
-        self.setStyleSheet(global_stylesheet(self.font_family))
+        self.setStyleSheet(self._global_stylesheet())
 
         central = QWidget(self)
         central.setObjectName("central")
@@ -624,3 +776,101 @@ class AppLayoutMixin(AppLocalizationMixin):
         lang_index = self.lang_selector.findData(self.i18n.lang)
         if lang_index >= 0:
             self.lang_selector.setCurrentIndex(lang_index)
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
+        self.app_name_label.setText(self.t("app_title") or APP_FALLBACK_TITLE)
+
+        self._title_desc_full = self.t("app_desc")
+        self._refresh_title_desc()
+        self.lang_label.setText(self.t("label_language"))
+        current_code = self.lang_selector.currentData()
+        self.lang_selector.blockSignals(True)
+        for i, code in enumerate(self._lang_codes):
+            language_name = LANGUAGE_NATIVE_NAMES.get(code, code.upper())
+            self.lang_selector.setItemText(i, language_name)
+        selected_index = self.lang_selector.findData(self.i18n.lang)
+        if selected_index >= 0:
+            self.lang_selector.setCurrentIndex(selected_index)
+        elif current_code in self._lang_codes:
+            self.lang_selector.setCurrentIndex(self.lang_selector.findData(current_code))
+        self.lang_selector.blockSignals(False)
+
+        self.source_section_label.setText("1  " + self.t("section_input").upper())
+        self.output_section_label.setText("2  " + self.t("section_output").upper())
+        self.mode_section_label.setText("3  " + self.t("section_mode").upper())
+        self.opt_section_label.setText("4  " + self.t("section_options").upper())
+        self.log_section_label.setText(self.t("section_log").upper())
+        self.main_output_section_label.setText(self.t("main_page_target").upper())
+        self.main_import_section_label.setText(self.t("main_page_import_section").upper())
+        self.merge_page_title.setText(self.t("merge_page_title"))
+        self.merge_page_desc.setText(self.t("merge_page_desc"))
+
+        self.page_btn_merge.setText(self.t("page_mode_merge"))
+        self.page_btn_main.setText(self.t("page_mode_main_folder"))
+        self.page_btn_inside.setText(self.t("page_mode_inside_folder"))
+
+        self.add_folder_btn.setText("+ " + self.t("btn_add_folder"))
+        self.edit_prefix_btn.setText(self.t("btn_edit_prefix"))
+        self.remove_btn.setText(self.t("btn_remove_selected"))
+        self.clear_btn.setText(self.t("btn_clear_all"))
+        self.output_btn.setText(self.t("btn_select_output"))
+        self.main_output_btn.setText(self.t("btn_select_output"))
+        self.main_add_folder_btn.setText("+ " + self.t("btn_add_folder"))
+        self.main_remove_btn.setText(self.t("btn_remove_selected"))
+        self.main_clear_btn.setText(self.t("btn_clear_all"))
+        self.start_btn.setText(self.t("btn_start"))
+        self._clear_log_btn.setText(self.t("btn_clear_log"))
+
+        self.col_folder_lbl.setText(self.t("col_folder"))
+        self.col_prefix_lbl.setText(self.t("col_prefix"))
+        self.main_col_folder_lbl.setText(self.t("col_folder"))
+
+        self.output_input.setPlaceholderText(self.t("section_output"))
+        self.main_output_input.setPlaceholderText(self.t("main_page_target"))
+
+        mode_data = {
+            MODE_COPY_KEEP: self.t("mode_copy_keep"),
+            MODE_COPY_DELETE: self.t("mode_copy_delete"),
+            MODE_MOVE: self.t("mode_move"),
+        }
+        short_desc = {
+            MODE_COPY_KEEP:   self.t("mode_desc_copy_keep"),
+            MODE_COPY_DELETE: self.t("mode_desc_copy_delete"),
+            MODE_MOVE:        self.t("mode_desc_move"),
+        }
+        for key, full in mode_data.items():
+            card = self.mode_cards[key]
+            card.title_lbl.setText(full)
+            card.desc_lbl.setText(short_desc[key])
+
+        self.clear_output_checkbox.setText(self.t("opt_clear_output"))
+        self.main_clear_output_checkbox.setText(self.t("opt_clear_output"))
+        self.allow_duplicates_checkbox.setText(self.t("opt_allow_duplicates"))
+        self.main_allow_duplicates_checkbox.setText(self.t("opt_allow_duplicates"))
+        self.safe_temp_checkbox.setText(self.t("opt_safe_temp_workspace"))
+        self.main_safe_temp_checkbox.setText(self.t("opt_safe_temp_workspace"))
+        self.main_remove_duplicates_checkbox.setText(self.t("opt_remove_duplicates"))
+        self.mode_note_label.setText(self.t("mode_note"))
+        if self._current_workflow == WORKFLOW_INSIDE_FOLDER:
+            self.main_page_title.setText(self.t("inside_page_title"))
+            self.main_page_desc.setText(self.t("inside_page_desc"))
+            self.main_page_note_label.setText(self.t("inside_page_note"))
+            self.main_import_section_label.setText(self.t("inside_page_import_section").upper())
+        else:
+            self.main_page_title.setText(self.t("main_page_title"))
+            self.main_page_desc.setText(self.t("main_page_desc"))
+            self.main_page_note_label.setText(self.t("main_page_note"))
+            self.main_import_section_label.setText(self.t("main_page_import_section").upper())
+        self.info_btn.setToolTip("About this app")
+        self.info_btn_main.setToolTip("About this app")
+
+        self.stat_added.set_label(self.t("stat_added"))
+        self.stat_skipped.set_label(self.t("stat_skipped"))
+        self.stat_total.set_label(self.t("stat_total_out"))
+        self.stat_failed.set_label(self.t("stat_failed"))
+
+        self._refresh_empty_label()
+        self._apply_workflow_button_state()
+        self._refresh_run_summary()
+

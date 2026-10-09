@@ -33,16 +33,14 @@ from ..config import (
 )
 from ..i18n import I18n
 from ..media_ops import (
-    MODE_COPY_DELETE,
     MODE_COPY_KEEP,
     MODE_INSIDE_FOLDER,
     MODE_MAIN_FOLDER,
+    normalize_prefix,
 )
-from ..media_ordering import normalize_prefix
 from ..worker import ProcessWorker
 from .layout import AppLayoutMixin
-from .styles import global_stylesheet
-from .widgets import FolderOnlyRow, ModeCard, SourceRow, StatCard, _h_sep, _section_label
+from .widgets import FolderOnlyRow, SourceRow
 
 class App(AppLayoutMixin, QMainWindow):
     def __init__(self):
@@ -105,14 +103,14 @@ class App(AppLayoutMixin, QMainWindow):
         else:
             self.main_empty_label.hide()
 
-    def _on_lang_selector_changed(self, index: int):
-        lang = self.lang_selector.itemData(index)
+    def _on_lang_selector_changed(self, _index: int):
+        lang = self.lang_selector.currentData()
         if lang not in SUPPORTED_LANGS or lang == self.i18n.lang:
             return
         self.i18n.lang = lang
         self.font_family = setup_app_fonts(lang)
         self._apply_dark_palette()
-        self.setStyleSheet(global_stylesheet(self.font_family))
+        self.setStyleSheet(self._global_stylesheet())
         self._retranslate_ui()
 
     def _build_about_text(self) -> str:
@@ -576,3 +574,4 @@ class App(AppLayoutMixin, QMainWindow):
 
     def _on_worker_process_error(self, msg: str):
         QMessageBox.critical(self, self.t("app_title"), msg)
+
