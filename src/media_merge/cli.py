@@ -14,8 +14,9 @@ from .media_ops import (
 )
 from .media_ordering import normalize_prefix
 
+
 def parse_cli_input(entry: str) -> dict:
-    raw = (entry or "").strip()
+    raw = entry.strip()
     if not raw:
         raise ValueError("Input entry cannot be empty")
 
@@ -23,6 +24,9 @@ def parse_cli_input(entry: str) -> dict:
         path_text, prefix_text = raw.rsplit("::", 1)
     else:
         path_text, prefix_text = raw, ""
+
+    if not path_text.strip():
+        raise ValueError("Input path cannot be empty")
 
     path = Path(path_text).expanduser().resolve()
     prefix = normalize_prefix(prefix_text)
@@ -66,7 +70,21 @@ def run_cli(argv: list[str]) -> int:
     if not args.output:
         parser.error("--output is required in CLI mode")
 
-    input_configs = [parse_cli_input(entry) for entry in args.input]
+    if args.remove_duplicates and args.mode != MODE_INSIDE_FOLDER:
+        parser.error("--remove-duplicates can only be used with --mode inside_folder")
+    if args.remove_duplicates and args.allow_duplicates:
+        parser.error("--remove-duplicates cannot be used with --allow-duplicates")
+    if args.clear_output and args.mode == MODE_INSIDE_FOLDER:
+        parser.error("--clear-output cannot be used with --mode inside_folder")
+
+    try:
+        input_configs = [parse_cli_input(entry) for entry in args.input]
+    except ValueError as exc:
+        parser.error(str(exc))
+    for config in input_configs:
+        if not config["path"].is_dir():
+            parser.error(f"Input path is not an existing directory: {config['path']}")
+
     lang = args.lang or detect_language()
     tr = I18n(lang).t
     output_dir = Path(args.output).expanduser().resolve()
@@ -84,4 +102,3 @@ def run_cli(argv: list[str]) -> int:
         tr=tr,
     )
     return 0
-

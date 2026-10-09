@@ -122,6 +122,11 @@ CLI options:
 - `--no-safe-temp`
 - `--lang ar|de|en|es|fr|id|ja|ko|ru|th|vi|zh`
 
+Input paths must already exist and be directories. `--remove-duplicates` is only
+valid with `--mode inside_folder` and cannot be combined with `--allow-duplicates`.
+`--clear-output` cannot be combined with `--mode inside_folder`, which organizes
+the selected output folder in place.
+
 In packaged builds, run the same options directly from the app binary (Windows/Linux/macOS).
 
 ## Sorting Rules
