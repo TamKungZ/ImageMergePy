@@ -1,17 +1,16 @@
 name: Publish Homebrew Cask
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag (e.g. v1.0.2)
+        description: Published GitHub Release tag (for example v2.0.0)
         required: true
         type: string
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -23,23 +22,23 @@ jobs:
   homebrew-cask:
     name: Update Homebrew Cask PR
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     steps:
       - name: Resolve release tag
         id: meta
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          if [ -z "$TAG" ]; then TAG="${{ inputs.tag }}"; fi
+          TAG="$RELEASE_TAG"
           if [ -z "$TAG" ]; then
             echo "Missing release tag"
             exit 1
           fi
-          VERSION="${TAG#v}"
-          if [ -z "$VERSION" ]; then
-            echo "Invalid version from tag: $TAG"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $TAG"
             exit 1
           fi
+          VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -50,11 +49,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.meta.outputs.tag }}"
-          ARM_URL="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.assets[] | select(.name == "ImageMerge-macos-binary-arm64.zip") | .browser_download_url')"
-          X64_URL="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.assets[] | select(.name == "ImageMerge-macos-binary-x64.zip") | .browser_download_url')"
+          RELEASE="$(gh api "repos/${{ github.repository }}/releases/tags/$TAG")"
+          if [ "$(printf '%s' "$RELEASE" | jq -r '.draft')" != "false" ]; then
+            echo "Release $TAG must be published before Homebrew submission."
+            exit 1
+          fi
+          if [ "$(printf '%s' "$RELEASE" | jq -r '.prerelease')" = "true" ]; then
+            echo "Homebrew submission is disabled for prereleases."
+            exit 1
+          fi
+          ARM_URL="$(printf '%s' "$RELEASE" | jq -r '.assets[] | select(.name == "ImageMerge-macos-app-arm64.zip") | .browser_download_url')"
+          X64_URL="$(printf '%s' "$RELEASE" | jq -r '.assets[] | select(.name == "ImageMerge-macos-app-x64.zip") | .browser_download_url')"
 
           if [ -z "$ARM_URL" ] && [ -z "$X64_URL" ]; then
-            echo "No macOS binary zip assets found for tag $TAG"
+            echo "No macOS app bundle zip assets found for tag $TAG"
             exit 1
           fi
 
@@ -62,12 +70,12 @@ jobs:
           X64_SHA256=""
 
           if [ -n "$ARM_URL" ]; then
-            curl -L "$ARM_URL" -o imagemerge-macos-arm64.zip
+            curl --fail --location --retry 3 "$ARM_URL" -o imagemerge-macos-arm64.zip
             ARM_SHA256="$(sha256sum imagemerge-macos-arm64.zip | cut -d' ' -f1)"
           fi
 
           if [ -n "$X64_URL" ]; then
-            curl -L "$X64_URL" -o imagemerge-macos-x64.zip
+            curl --fail --location --retry 3 "$X64_URL" -o imagemerge-macos-x64.zip
             X64_SHA256="$(sha256sum imagemerge-macos-x64.zip | cut -d' ' -f1)"
           fi
 
@@ -97,9 +105,11 @@ jobs:
 
       - name: Validate tap token
         shell: bash
+        env:
+          TAP_REPO: ${{ steps.tap.outputs.repo }}
+          HOME_BREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
         run: |
-          TAP_REPO="${{ steps.tap.outputs.repo }}"
-          if [ "$TAP_REPO" != "${{ github.repository }}" ] && [ -z "${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}" ]; then
+          if [ "$TAP_REPO" != "$GITHUB_REPOSITORY" ] && [ -z "$HOME_BREW_TAP_GITHUB_TOKEN" ]; then
             echo "Missing secret: HOMEBREW_TAP_GITHUB_TOKEN"
             echo "This workflow needs a token with access to ${TAP_REPO} for checkout/push/PR."
             exit 1
@@ -176,7 +186,7 @@ jobs:
               printf '  name "ImageMerge"\n'
               printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
               printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
-              printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
+              printf '  app "ImageMerge.app"\n'
               printf 'end\n'
             } > "tap/Casks/${{ env.CASK_NAME }}.rb"
           elif [ -n "$ARM_URL" ]; then
@@ -188,7 +198,7 @@ jobs:
               printf '  name "ImageMerge"\n'
               printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
               printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
-              printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
+              printf '  app "ImageMerge.app"\n'
               printf 'end\n'
             } > "tap/Casks/${{ env.CASK_NAME }}.rb"
           else
@@ -200,36 +210,22 @@ jobs:
               printf '  name "ImageMerge"\n'
               printf '  desc "%s"\n' "${{ env.CASK_DESC }}"
               printf '  homepage "%s"\n\n' "${{ env.CASK_HOMEPAGE }}"
-              printf '  binary "ImageMerge/ImageMerge", target: "ImageMerge"\n'
+              printf '  app "ImageMerge.app"\n'
               printf 'end\n'
             } > "tap/Casks/${{ env.CASK_NAME }}.rb"
           fi
-
-      - name: Cleanup old cask branches
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
-        run: |
-          TAP_REPO="${{ steps.tap.outputs.repo }}"
-          PREFIX="heads/chore/cask-${{ env.CASK_NAME }}-"
-          REFS_JSON="$(gh api "repos/${TAP_REPO}/git/matching-refs/${PREFIX}" 2>/dev/null || echo '[]')"
-
-          echo "$REFS_JSON" | jq -r '.[].ref // empty' | while IFS= read -r ref; do
-            branch="${ref#refs/heads/}"
-            if [ -z "$branch" ]; then
-              continue
-            fi
-            gh api -X DELETE "repos/${TAP_REPO}/git/refs/heads/${branch}" >/dev/null 2>&1 || true
-          done
 
       - name: Create pull request in tap repo
         id: pr
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          TAP_REPO: ${{ steps.tap.outputs.repo }}
+          BASE_REPO: ${{ steps.tap.outputs.base_repo }}
+          TAP_OWNER: ${{ steps.tap.outputs.owner }}
         run: |
-          TAP_REPO="${{ steps.tap.outputs.repo }}"
-          if [ "$TAP_REPO" != "${{ github.repository }}" ] && [ -z "${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}" ]; then
+          if [ "$TAP_REPO" != "$GITHUB_REPOSITORY" ] && [ -z "$HOMEBREW_TAP_GITHUB_TOKEN" ]; then
             echo "Missing secret: HOMEBREW_TAP_GITHUB_TOKEN"
             exit 1
           fi
@@ -243,7 +239,7 @@ jobs:
           git -C tap add "Casks/${{ env.CASK_NAME }}.rb"
 
           if git -C tap diff --cached --quiet; then
-            echo "No cask changes to commit"
+            echo "No cask changes to submit; the tap already has version ${VERSION}."
             exit 0
           fi
 
@@ -251,34 +247,12 @@ jobs:
           git -C tap push -u origin "$BRANCH"
 
           PR_URL="$(gh pr create \
-            --repo "${{ steps.tap.outputs.base_repo }}" \
-            --head "${{ steps.tap.outputs.owner }}:$BRANCH" \
+            --repo "$BASE_REPO" \
+            --head "$TAP_OWNER:$BRANCH" \
             --base "${{ steps.tapmeta.outputs.default_branch }}" \
             --title "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}" \
             --body "Automated cask update for release ${VERSION}.")"
 
-          PR_NUMBER="$(gh pr view "$PR_URL" --repo "${{ steps.tap.outputs.base_repo }}" --json number --jq '.number')"
+          PR_NUMBER="$(gh pr view "$PR_URL" --repo "$BASE_REPO" --json number --jq '.number')"
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-
-      - name: Auto-merge and delete branch
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || github.token }}
-        run: |
-          TAP_REPO="${{ steps.tap.outputs.repo }}"
-          BASE_REPO="${{ steps.tap.outputs.base_repo }}"
-          PR_NUMBER="${{ steps.pr.outputs.number }}"
-
-          if [ -z "$PR_NUMBER" ]; then
-            echo "No pull request number found, skipping auto-merge"
-            exit 0
-          fi
-
-          if [ "$TAP_REPO" != "$BASE_REPO" ]; then
-            echo "Base repo differs from tap repo ($BASE_REPO). Skipping auto-merge."
-            exit 0
-          fi
-
-          gh pr merge "$PR_NUMBER" --repo "$BASE_REPO" --squash --delete-branch >/dev/null 2>&1 || \
-            gh pr merge "$PR_NUMBER" --repo "$BASE_REPO" --auto --squash --delete-branch >/dev/null 2>&1 || true

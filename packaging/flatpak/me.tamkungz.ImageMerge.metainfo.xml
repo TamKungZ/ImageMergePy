@@ -5,6 +5,7 @@
   <project_license>MIT</project_license>
   <name>ImageMerge</name>
   <summary>Open-source image and video merge tool</summary>
+  <icon type="stock">me.tamkungz.ImageMerge</icon>
   <description>
     <p>
       ImageMerge merges images and videos from multiple folders into one output,
@@ -12,8 +13,31 @@
     </p>
   </description>
   <launchable type="desktop-id">me.tamkungz.ImageMerge.desktop</launchable>
+  <categories>
+    <category>Graphics</category>
+    <category>Utility</category>
+  </categories>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-start.png</image>
+      <caption>Main workflow</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-mode.png</image>
+      <caption>Choose a workflow</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-options.png</image>
+      <caption>Configure merge options</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-add.png</image>
+      <caption>Select input folders</caption>
+    </screenshot>
+  </screenshots>
   <url type="homepage">https://dev.tamkungz.me</url>
   <url type="bugtracker">https://github.com/TamKungZ/ImageMergePy/issues</url>
+  <url type="vcs-browser">https://github.com/TamKungZ/ImageMergePy</url>
   <developer id="me.tamkungz">
     <name>TamKungZ_</name>
   </developer>

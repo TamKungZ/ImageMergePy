@@ -1,19 +1,22 @@
 name: Publish Snap
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag (e.g. v1.0.3)
+        description: Published GitHub Release tag (for example v2.0.0)
         required: true
         type: string
       channel:
-        description: Snap channel (stable/candidate/beta/edge)
-        required: false
-        default: stable
-        type: string
+        description: Snap Store channel (choose stable only after manual review)
+        required: true
+        default: beta
+        type: choice
+        options:
+          - edge
+          - beta
+          - candidate
+          - stable
 
 permissions:
   contents: read
@@ -25,21 +28,25 @@ jobs:
   publish-snap:
     name: Upload Snap to Store
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     steps:
       - name: Resolve release tag and channel
         id: meta
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          if [ -z "$TAG" ]; then TAG="${{ inputs.tag }}"; fi
+          TAG="$RELEASE_TAG"
           if [ -z "$TAG" ]; then
             echo "Missing release tag"
             exit 1
           fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $TAG"
+            exit 1
+          fi
 
-          CHANNEL="stable"
-          if [ -n "${{ inputs.channel }}" ]; then CHANNEL="${{ inputs.channel }}"; fi
+          CHANNEL="$RELEASE_CHANNEL"
           case "$CHANNEL" in
             stable|candidate|beta|edge) ;;
             *)
@@ -54,8 +61,10 @@ jobs:
 
       - name: Validate Snap Store credentials
         shell: bash
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
-          if [ -z "${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}" ]; then
+          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
             echo "Missing secret: SNAPCRAFT_STORE_CREDENTIALS"
             echo "Create credentials with: snapcraft export-login ..."
             exit 1
@@ -68,8 +77,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.meta.outputs.tag }}"
-          SNAP_URL="$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" --jq '[.assets[] | select(.name | endswith(".snap"))][0].browser_download_url')"
-          SNAP_NAME="$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" --jq '[.assets[] | select(.name | endswith(".snap"))][0].name')"
+          RELEASE="$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}")"
+          if [ "$(printf '%s' "$RELEASE" | jq -r '.draft')" != "false" ]; then
+            echo "Release $TAG must be published before Snap submission."
+            exit 1
+          fi
+          if [ "$(printf '%s' "$RELEASE" | jq -r '.prerelease')" = "true" ]; then
+            echo "Snap submission is disabled for prereleases."
+            exit 1
+          fi
+          SNAP_URL="$(printf '%s' "$RELEASE" | jq -r '[.assets[] | select(.name | endswith(".snap"))][0].browser_download_url // empty')"
+          SNAP_NAME="$(printf '%s' "$RELEASE" | jq -r '[.assets[] | select(.name | endswith(".snap"))][0].name // empty')"
 
           if [ -z "$SNAP_URL" ] || [ -z "$SNAP_NAME" ] || [ "$SNAP_URL" = "null" ] || [ "$SNAP_NAME" = "null" ]; then
             echo "No .snap release asset found for tag ${TAG}"
@@ -82,7 +100,7 @@ jobs:
       - name: Download snap asset
         shell: bash
         run: |
-          curl -L "${{ steps.asset.outputs.url }}" -o "${{ steps.asset.outputs.name }}"
+          curl --fail --location --retry 3 "${{ steps.asset.outputs.url }}" -o "${{ steps.asset.outputs.name }}"
 
       - name: Publish to Snap Store
         uses: snapcore/action-publish@v1

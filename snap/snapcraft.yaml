@@ -1,10 +1,15 @@
 name: tamkungz-imagemerge
+title: ImageMerge
 base: core22
 version: git
 summary: Open-source image and video merge tool
 description: |
   ImageMerge merges images and videos from multiple folders into one output,
   supports duplicate removal with SHA-256, and optional file renaming.
+license: MIT
+website: https://github.com/TamKungZ/ImageMergePy
+source-code: https://github.com/TamKungZ/ImageMergePy
+issues: https://github.com/TamKungZ/ImageMergePy/issues
 grade: stable
 confinement: strict
 

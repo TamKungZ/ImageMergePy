@@ -1,12 +1,10 @@
 name: Publish WinGet Manifest
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag (e.g. v1.0.2)
+        description: Published GitHub Release tag (for example v2.0.0)
         required: true
         type: string
 
@@ -22,20 +20,18 @@ jobs:
   winget:
     name: Submit to WinGet
     runs-on: windows-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     steps:
       - name: Resolve release tag
         id: meta
         shell: powershell
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          $tag = "${{ github.event.release.tag_name }}"
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            $tag = "${{ inputs.tag }}"
-          }
+          $tag = $env:RELEASE_TAG
           if ([string]::IsNullOrWhiteSpace($tag)) { throw "Missing release tag" }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') { throw "Invalid release tag: $tag" }
           $version = $tag
           if ($version.StartsWith('v')) { $version = $version.Substring(1) }
-          if ([string]::IsNullOrWhiteSpace($version)) { throw "Invalid version from tag: $tag" }
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
@@ -45,8 +41,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = 'Stop'
           $tag = "${{ steps.meta.outputs.tag }}"
-          $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" | ConvertFrom-Json
+          $releaseJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw "Unable to fetch GitHub Release $tag" }
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.draft) { throw "Release $tag must be published before WinGet submission" }
+          if ($release.prerelease) { throw "WinGet submission is disabled for prereleases" }
           $asset = $release.assets | Where-Object { $_.name -eq $env:WINGET_INSTALLER_NAME } | Select-Object -First 1
           if (-not $asset) {
             throw "Asset '$env:WINGET_INSTALLER_NAME' not found in release $tag"
@@ -70,29 +71,34 @@ jobs:
           }
 
           $env:GH_TOKEN = $env:WINGET_GITHUB_TOKEN
-          $owner = (gh api user --jq .login).Trim()
+          $ownerOutput = gh api user --jq .login
+          if ($LASTEXITCODE -ne 0) { throw "Unable to authenticate WINGET_GITHUB_TOKEN" }
+          $owner = ([string]$ownerOutput).Trim()
           if ([string]::IsNullOrWhiteSpace($owner)) {
             throw "Unable to resolve GitHub login for WINGET_GITHUB_TOKEN"
           }
 
-          $upstreamDefaultBranch = (gh api repos/microsoft/winget-pkgs --jq .default_branch).Trim()
+          $upstreamBranchOutput = gh api repos/microsoft/winget-pkgs --jq .default_branch
+          if ($LASTEXITCODE -ne 0) { throw "Unable to read microsoft/winget-pkgs default branch" }
+          $upstreamDefaultBranch = ([string]$upstreamBranchOutput).Trim()
           if ([string]::IsNullOrWhiteSpace($upstreamDefaultBranch)) {
             throw "Unable to resolve microsoft/winget-pkgs default branch"
           }
 
-          $forkExists = $true
-          try {
-            gh api "repos/$owner/winget-pkgs" | Out-Null
-          } catch {
-            $forkExists = $false
-          }
+          $forkLookup = gh api "repos/$owner/winget-pkgs" 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            $forkError = $forkLookup -join "`n"
+            if ($forkError -notmatch '(?i)(HTTP\s+404|Not Found)') {
+              throw "Unable to check winget-pkgs fork: $forkError"
+            }
 
-          if (-not $forkExists) {
             gh api -X POST "repos/microsoft/winget-pkgs/forks" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Unable to create winget-pkgs fork" }
             Start-Sleep -Seconds 5
           }
 
           gh api -X POST "repos/$owner/winget-pkgs/merge-upstream" -f branch="$upstreamDefaultBranch" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Unable to sync winget-pkgs fork with upstream" }
 
       - name: Submit WinGet manifest update
         shell: powershell
@@ -111,5 +117,5 @@ jobs:
 
           .\wingetcreate.exe update $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
           if ($LASTEXITCODE -ne 0) {
-            throw "wingetcreate update failed. For first submission, run wingetcreate new <installerUrl> manually and submit to microsoft/winget-pkgs. After first merge, this workflow will update automatically."
+            throw "wingetcreate update failed. For a first-time package submission, use wingetcreate new with the release MSI URL and submit its manifest PR manually."
           }

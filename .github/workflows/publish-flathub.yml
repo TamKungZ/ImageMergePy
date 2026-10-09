@@ -1,12 +1,10 @@
 name: Publish Flathub PR
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag (e.g. v1.0.3)
+        description: Published GitHub Release tag (for example v2.0.0)
         required: true
         type: string
 
@@ -21,36 +19,39 @@ jobs:
   flathub-pr:
     name: Create/Update Flathub PR
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     steps:
       - name: Resolve release tag
         id: meta
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          if [ -z "$TAG" ]; then TAG="${{ inputs.tag }}"; fi
+          TAG="$RELEASE_TAG"
           if [ -z "$TAG" ]; then
             echo "Missing release tag"
             exit 1
           fi
-          VERSION="${TAG#v}"
-          if [ -z "$VERSION" ]; then
-            echo "Invalid version from tag: $TAG"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $TAG"
             exit 1
           fi
+          VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Resolve Flathub target
         id: target
         shell: bash
+        env:
+          FLATHUB_TARGET_REPO: ${{ vars.FLATHUB_TARGET_REPO }}
+          FLATHUB_BASE_REPO: ${{ vars.FLATHUB_BASE_REPO }}
         run: |
-          TARGET_REPO="${{ vars.FLATHUB_TARGET_REPO }}"
+          TARGET_REPO="$FLATHUB_TARGET_REPO"
           if [ -z "$TARGET_REPO" ]; then
             TARGET_REPO="${{ github.repository_owner }}/flathub"
           fi
 
-          BASE_REPO="${{ vars.FLATHUB_BASE_REPO }}"
+          BASE_REPO="$FLATHUB_BASE_REPO"
           if [ -z "$BASE_REPO" ]; then
             BASE_REPO="flathub/flathub"
           fi
@@ -63,10 +64,12 @@ jobs:
 
       - name: Validate Flathub token
         shell: bash
+        env:
+          FLATHUB_GITHUB_TOKEN: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
         run: |
-          if [ -z "${{ secrets.FLATHUB_GITHUB_TOKEN }}" ]; then
+          if [ -z "$FLATHUB_GITHUB_TOKEN" ]; then
             echo "Missing secret: FLATHUB_GITHUB_TOKEN"
-            echo "Required for pushing branch to ${{ steps.target.outputs.target_repo }} and opening PR to flathub."
+            echo "Required for pushing a branch to the configured Flathub fork and opening the upstream PR."
             exit 1
           fi
 
@@ -76,11 +79,22 @@ jobs:
       - name: Build source URL and checksum
         id: source
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.meta.outputs.tag }}"
           SRC_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
 
-          curl -L "$SRC_URL" -o source.tar.gz
+          RELEASE="$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}")"
+          if [ "$(printf '%s' "$RELEASE" | jq -r '.draft')" != "false" ]; then
+            echo "Release $TAG must be published before Flathub submission."
+            exit 1
+          fi
+          if [ "$(printf '%s' "$RELEASE" | jq -r '.prerelease')" = "true" ]; then
+            echo "Flathub submission is disabled for prereleases."
+            exit 1
+          fi
+          curl --fail --location --retry 3 "$SRC_URL" -o source.tar.gz
           SRC_SHA256="$(sha256sum source.tar.gz | cut -d' ' -f1)"
 
           echo "url=$SRC_URL" >> "$GITHUB_OUTPUT"
@@ -99,8 +113,19 @@ jobs:
           source_url = "${{ steps.source.outputs.url }}"
           source_sha = "${{ steps.source.outputs.sha256 }}"
 
-          text = re.sub(r'(?m)^\s*url:\s*https://github.com/.+?/archive/refs/tags/.+?\.tar\.gz\s*$', f'        url: {source_url}', text)
-          text = re.sub(r'(?m)^\s*sha256:\s*[0-9a-f]{64}\s*$', f'        sha256: {source_sha}', text)
+          archive_pattern = re.compile(
+              r'(?m)(^      - type: archive\n        url: )'
+              r'https://github\.com/[^ \n]+/archive/refs/tags/[^ \n]+\.tar\.gz'
+              r'(\n        sha256: )[0-9a-f]{64}$'
+          )
+          text, replacements = archive_pattern.subn(
+              lambda match: f'{match.group(1)}{source_url}{match.group(2)}{source_sha}',
+              text,
+          )
+          if replacements != 1:
+              raise SystemExit(
+                  f'Expected exactly one GitHub source archive checksum to update; found {replacements}'
+              )
 
           out_path = Path('me.tamkungz.ImageMerge.yml')
           out_path.write_text(text, encoding='utf-8')
