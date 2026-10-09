@@ -10,9 +10,9 @@ from .media_ops import (
     MODE_INSIDE_FOLDER,
     MODE_MAIN_FOLDER,
     MODE_MOVE,
-    normalize_prefix,
     process_media,
 )
+from .media_ordering import normalize_prefix
 
 def parse_cli_input(entry: str) -> dict:
     raw = (entry or "").strip()
@@ -84,5 +84,4 @@ def run_cli(argv: list[str]) -> int:
         tr=tr,
     )
     return 0
-
 
