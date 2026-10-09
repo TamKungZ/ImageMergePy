@@ -73,7 +73,7 @@ class App(QMainWindow):
         self.i18n = I18n(detect_language())
         self.t = self.i18n.t
 
-        icon_path = APP_DIR / "assets" / "icon.ico"
+        icon_path = APP_DIR / "assets" / "icons" / "app-icon.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -1425,5 +1425,4 @@ class App(QMainWindow):
 
     def _on_worker_process_error(self, msg: str):
         QMessageBox.critical(self, self.t("app_title"), msg)
-
 

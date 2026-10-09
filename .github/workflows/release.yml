@@ -78,7 +78,6 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import base64
           import os
           import shutil
           import stat
@@ -194,13 +193,10 @@ jobs:
               encoding='utf-8',
           )
 
-          icon_source = root / 'assets' / 'imagemerge-icon-1024.png'
-          if icon_source.exists():
-              icon_png = icon_source.read_bytes()
-          else:
-              icon_png = base64.b64decode(
-                  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0XcAAAAASUVORK5CYII='
-              )
+          icon_source = root / 'assets' / 'icons' / 'app-icon-1024.png'
+          if not icon_source.is_file():
+              raise FileNotFoundError(f'Missing application icon: {icon_source}')
+          icon_png = icon_source.read_bytes()
           (appdir / 'ImageMerge.png').write_bytes(icon_png)
           (appdir / '.DirIcon').write_bytes(icon_png)
 
@@ -447,7 +443,7 @@ jobs:
           while ($versionParts.Count -lt 3) { $versionParts += "0" }
           $msiVersion = "$($versionParts[0]).$($versionParts[1]).$($versionParts[2])"
 
-          $iconPath = (Resolve-Path "assets/icon.ico").Path
+          $iconPath = (Resolve-Path "assets/icons/app-icon.ico").Path
 
           $archRaw = ($env:PROCESSOR_ARCHITECTURE + "").ToLowerInvariant()
           $archLabel = switch ($archRaw) {
@@ -551,7 +547,7 @@ jobs:
           light -spdb -ext WixUIExtension ImageMergeGUI.wixobj ImageMergeFiles.wixobj -o $msStoreMsiOutput
           Sign-ReleaseFile -Path $msStoreMsiOutput
 
-          $iconSource = "assets/imagemerge-icon-1024.png"
+          $iconSource = "assets/icons/app-icon-1024.png"
           if (-not (Test-Path $iconSource)) { throw "Missing icon source for MSIX: $iconSource" }
 
           $msixRoot = "msix_root"
@@ -587,6 +583,7 @@ jobs:
 
           Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "Square44x44Logo.png") -Width 44 -Height 44
           Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "Square150x150Logo.png") -Width 150 -Height 150
+          Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "Square310x310Logo.png") -Width 310 -Height 310
           Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "StoreLogo.png") -Width 50 -Height 50
 
           $versionParts4 = $productVersionRaw.Split('.')
@@ -609,7 +606,7 @@ jobs:
             '  <Applications>',
             '    <Application Id="App" Executable="ImageMerge.exe" EntryPoint="Windows.FullTrustApplication">',
             '      <uap:VisualElements DisplayName="ImageMergeGUI" Description="Open-source image and video merge tool" BackgroundColor="transparent" Square44x44Logo="Assets/Square44x44Logo.png" Square150x150Logo="Assets/Square150x150Logo.png">',
-            '        <uap:DefaultTile Wide310x150Logo="Assets/Square150x150Logo.png" Square310x310Logo="Assets/Square150x150Logo.png" />',
+            '        <uap:DefaultTile Wide310x150Logo="Assets/Square150x150Logo.png" Square310x310Logo="Assets/Square310x310Logo.png" />',
             '      </uap:VisualElements>',
             '      <Extensions><desktop:Extension Category="windows.fullTrustProcess" Executable="ImageMerge.exe" /></Extensions>',
             '    </Application>',

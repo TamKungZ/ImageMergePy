@@ -16,11 +16,11 @@ modules:
       - cp -a . /app/lib/ImageMerge/
       - install -m 0755 /app/lib/ImageMerge/ImageMerge /app/bin/ImageMerge
       - install -m 0644 me.tamkungz.ImageMerge.desktop /app/share/applications/me.tamkungz.ImageMerge.desktop
-      - install -m 0644 me.tamkungz.ImageMerge.svg /app/share/icons/hicolor/scalable/apps/me.tamkungz.ImageMerge.svg
+      - install -m 0644 app-icon.svg /app/share/icons/hicolor/scalable/apps/me.tamkungz.ImageMerge.svg
     sources:
       - type: dir
         path: flatpak-src
       - type: file
         path: me.tamkungz.ImageMerge.desktop
       - type: file
-        path: me.tamkungz.ImageMerge.svg
+        path: ../../assets/icons/app-icon.svg

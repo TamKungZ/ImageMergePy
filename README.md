@@ -160,6 +160,11 @@ Build tooling and its locale generator live in `scripts/`. Translation sources,
 application assets, and OS packaging manifests remain in `locales/`, `assets/`,
 and `packaging/`.
 
+Application icons live in `assets/icons/`: `app-icon.svg`, `app-icon-1024.png`,
+and `app-icon.ico` are the canonical source files. Platform-specific PNG sizes
+are derived from the 1024px source, while the macOS `.icns` icon is generated
+into `build/` during a macOS build. Fonts are kept under `assets/fonts/`.
+
 ## Build (Nuitka)
 
 Install dependencies first:

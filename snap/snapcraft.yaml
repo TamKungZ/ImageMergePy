@@ -36,4 +36,4 @@ parts:
       mkdir -p "$CRAFT_PART_INSTALL/usr/lib/ImageMerge"
       cp -a "$CRAFT_PART_SRC"/. "$CRAFT_PART_INSTALL/usr/lib/ImageMerge/"
       install -Dm0644 "$CRAFT_PROJECT_DIR/snap/gui/me.tamkungz.ImageMerge.desktop" "$CRAFT_PART_INSTALL/snap/gui/me.tamkungz.ImageMerge.desktop"
-      install -Dm0644 "$CRAFT_PROJECT_DIR/packaging/flatpak/me.tamkungz.ImageMerge.svg" "$CRAFT_PART_INSTALL/snap/gui/icon.svg"
+      install -Dm0644 "$CRAFT_PROJECT_DIR/assets/icons/app-icon.svg" "$CRAFT_PART_INSTALL/snap/gui/icon.svg"

@@ -110,7 +110,7 @@ def load_app_metadata(root: Path) -> dict[str, str]:
         "copyright": "",
         "icon_ico": "",
         "icon_icns": "",
-        "icon_png": "assets/imagemerge-icon-1024.png",
+        "icon_png": "assets/icons/app-icon-1024.png",
     }
 
     metadata_path = root / METADATA_FILE
@@ -149,10 +149,9 @@ def windows_metadata_args(root: Path, metadata: dict[str, str]) -> list[str]:
     icon_relative = metadata.get("icon_ico", "")
     if icon_relative:
         icon_path = root / icon_relative
-        if icon_path.exists():
-            args.append(f"--windows-icon-from-ico={icon_path}")
-        else:
-            print(f"Icon not found, skipping icon metadata: {icon_path}")
+        if not icon_path.is_file():
+            raise FileNotFoundError(f"Windows icon not found: {icon_path}")
+        args.append(f"--windows-icon-from-ico={icon_path}")
 
     return args
 
@@ -163,59 +162,55 @@ def resolve_macos_icon(root: Path, metadata: dict[str, str]) -> Path | None:
     icon_icns = metadata.get("icon_icns", "").strip()
     if icon_icns:
         icon_candidates.append(root / icon_icns)
-    icon_candidates.append(root / "assets" / "icon.icns")
-
     for candidate in icon_candidates:
-        if candidate.exists():
+        if candidate.is_file():
             return candidate
 
-    png_relative = metadata.get("icon_png", "assets/imagemerge-icon-1024.png").strip()
+    png_relative = metadata.get("icon_png", "assets/icons/app-icon-1024.png").strip()
     if not png_relative:
         return None
 
     png_source = root / png_relative
-    if not png_source.exists():
-        return None
+    if not png_source.is_file():
+        raise FileNotFoundError(f"macOS icon source not found: {png_source}")
 
-    try:
-        iconset_dir = root / "build" / "ImageMerge.iconset"
-        if iconset_dir.exists():
-            shutil.rmtree(iconset_dir)
-        iconset_dir.mkdir(parents=True, exist_ok=True)
+    iconset_dir = root / "build" / "ImageMerge.iconset"
+    if iconset_dir.exists():
+        shutil.rmtree(iconset_dir)
+    iconset_dir.mkdir(parents=True, exist_ok=True)
 
-        iconset_entries = [
-            ("icon_16x16.png", 16),
-            ("icon_16x16@2x.png", 32),
-            ("icon_32x32.png", 32),
-            ("icon_32x32@2x.png", 64),
-            ("icon_128x128.png", 128),
-            ("icon_128x128@2x.png", 256),
-            ("icon_256x256.png", 256),
-            ("icon_256x256@2x.png", 512),
-            ("icon_512x512.png", 512),
-            ("icon_512x512@2x.png", 1024),
-        ]
+    iconset_entries = [
+        ("icon_16x16.png", 16),
+        ("icon_16x16@2x.png", 32),
+        ("icon_32x32.png", 32),
+        ("icon_32x32@2x.png", 64),
+        ("icon_128x128.png", 128),
+        ("icon_128x128@2x.png", 256),
+        ("icon_256x256.png", 256),
+        ("icon_256x256@2x.png", 512),
+        ("icon_512x512.png", 512),
+        ("icon_512x512@2x.png", 1024),
+    ]
 
-        for file_name, size in iconset_entries:
-            run_cmd(
-                [
-                    "sips",
-                    "-z",
-                    str(size),
-                    str(size),
-                    str(png_source),
-                    "--out",
-                    str(iconset_dir / file_name),
-                ],
-                root,
-            )
+    for file_name, size in iconset_entries:
+        run_cmd(
+            [
+                "sips",
+                "-z",
+                str(size),
+                str(size),
+                str(png_source),
+                "--out",
+                str(iconset_dir / file_name),
+            ],
+            root,
+        )
 
-        generated_icns = root / "assets" / "icon.icns"
-        run_cmd(["iconutil", "-c", "icns", str(iconset_dir), "-o", str(generated_icns)], root)
-        return generated_icns if generated_icns.exists() else None
-    except Exception as exc:
-        print(f"Unable to generate macOS icon automatically: {exc}")
-        return None
+    generated_icns = root / "build" / "ImageMerge.icns"
+    run_cmd(["iconutil", "-c", "icns", str(iconset_dir), "-o", str(generated_icns)], root)
+    if not generated_icns.is_file():
+        raise FileNotFoundError(f"macOS icon generation did not produce: {generated_icns}")
+    return generated_icns
 
 
 def sign_windows_binary(binary_path: Path):
