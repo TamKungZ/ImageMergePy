@@ -65,7 +65,9 @@ Prebuilt packages are published in GitHub Releases:
 winget install TamKungZ.ImageMerge
 ```
 
-- Download and run `ImageMerge-windows-x64.msi`
+- Download and run `ImageMerge-windows-x64.msi`. The installer adds its
+  installation folder to the system `PATH`; open a new terminal after install
+  and invoke the CLI with `ImageMerge`.
 - Or extract the standalone folder package `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
 - Microsoft Store submission asset: `ImageMergeGUI-windows-x64.msix`
 - WinGet manifest submission is available as a manually started workflow for
@@ -79,6 +81,16 @@ winget install TamKungZ.ImageMerge
 sudo apt install ./ImageMerge-linux-x64.deb
 ```
 
+- Ubuntu PPA (Ubuntu 22.04, 24.04, and 26.04):
+
+```bash
+sudo add-apt-repository ppa:tamkungz/stable
+sudo apt update
+sudo apt install imagemerge
+```
+
+- `.deb` and `.rpm` packages install the `imagemerge` command into `/usr/bin`,
+  so it is immediately available on `PATH`.
 - Fedora/RHEL/openSUSE: install `ImageMerge-linux-x64.rpm`
 
 ```bash
@@ -125,6 +137,24 @@ python MainApp.py --cli --input "/path/to/folderA::full" --input "/path/to/folde
 ```bash
 ImageMerge --cli --input "/path/a::full" --input "/path/b::short" --output "/path/out" --mode copy_keep
 ```
+
+After installing the Windows MSI, `ImageMerge` is available on `PATH`. After
+installing a Linux `.deb` or `.rpm`, use `imagemerge` directly:
+
+```bash
+imagemerge --input "/path/a::full" --output "/path/out" --mode copy_keep
+```
+
+Ubuntu PPA source uploads are prepared by the manual
+[`publish-launchpad.yml`](.github/workflows/publish-launchpad.yml) workflow
+after a GitHub Release is published. It uploads to
+[`ppa:tamkungz/stable`](https://launchpad.net/~tamkungz/+archive/ubuntu/stable)
+for Jammy, Noble, and Resolute. The PPA package is amd64-only and wraps the
+published standalone Linux runtime; it does not rebuild the application from
+Python source. The upload requires the existing GPG secrets (`GPG_PRIVATE_KEY`,
+`GPG_PASSPHRASE`, and `GPG_KEY_ID`) and a maintainer email registered with
+Launchpad and the signing key. Import the corresponding public GPG key into the
+Launchpad account before the first upload.
 
 CLI options:
 

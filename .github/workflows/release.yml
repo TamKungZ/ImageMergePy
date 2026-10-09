@@ -543,8 +543,15 @@ jobs:
               [string]$WxsPath,
               [string]$ProductName,
               [string]$UpgradeCode,
-              [string]$RegistryName
+              [string]$RegistryName,
+              [switch]$AddCommandPath
             )
+
+            $commandPathFeatureRef = if ($AddCommandPath) {
+              '      <ComponentGroupRef Id="ImageMergeCommandPath" />'
+            } else {
+              ''
+            }
 
             $wxs = @(
               '<?xml version="1.0" encoding="UTF-8"?>',
@@ -563,6 +570,7 @@ jobs:
               ('    <Feature Id="MainFeature" Title="{0}" Level="1">' -f $ProductName),
               '      <ComponentGroupRef Id="ImageMergeFiles" />',
               '      <ComponentGroupRef Id="ImageMergeShortcuts" />',
+              $commandPathFeatureRef,
               '    </Feature>',
               '  </Product>',
               '',
@@ -592,6 +600,15 @@ jobs:
               '    </ComponentGroup>',
               '  </Fragment>',
               '',
+              '  <Fragment>',
+              '    <ComponentGroup Id="ImageMergeCommandPath">',
+              '      <Component Id="CommandPathComponent" Directory="INSTALLFOLDER" Guid="*">',
+              '        <Environment Id="ImageMergePathEnvironment" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="append" System="yes" />',
+              ('        <RegistryValue Root="HKLM" Key="Software\TamKungZ_\{0}" Name="CommandPath" Type="integer" Value="1" KeyPath="yes" />' -f $RegistryName),
+              '      </Component>',
+              '    </ComponentGroup>',
+              '  </Fragment>',
+              '',
               '</Wix>'
             ) -join "`n"
 
@@ -601,7 +618,7 @@ jobs:
           $standardWxsPath = "installer\ImageMerge.wxs"
           $msStoreWxsPath = "installer\ImageMergeGUI.wxs"
 
-          Write-WixDefinition -WxsPath $standardWxsPath -ProductName "ImageMerge" -UpgradeCode "C5A07E9D-9634-44F0-8D8E-050A2F31A8E9" -RegistryName "ImageMerge"
+          Write-WixDefinition -WxsPath $standardWxsPath -ProductName "ImageMerge" -UpgradeCode "C5A07E9D-9634-44F0-8D8E-050A2F31A8E9" -RegistryName "ImageMerge" -AddCommandPath
           Write-WixDefinition -WxsPath $msStoreWxsPath -ProductName "ImageMergeGUI" -UpgradeCode "A7E84311-245A-4287-B710-95A783D047A8" -RegistryName "ImageMergeGUI"
 
           $wixArch = if ($archLabel -eq "x86") { "x86" } else { "x64" }

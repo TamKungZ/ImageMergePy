@@ -1,0 +1,17 @@
+Source: imagemerge
+Section: graphics
+Priority: optional
+Maintainer: TamKungZ_ <__LAUNCHPAD_MAINTAINER_EMAIL__>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/TamKungZ/ImageMergePy
+
+Package: imagemerge
+Architecture: amd64
+Depends: libxcb-cursor0, libxkbcommon-x11-0, libxcb-icccm4,
+ libxcb-keysyms1, libxcb-randr0, libxcb-shape0, libxcb-xfixes0,
+ libxcb-xinerama0, libx11-xcb1, libxcb-render-util0, libxcb-image0,
+ libegl1, libgl1, ${misc:Depends}
+Description: Open-source image and video merge tool
+ ImageMerge merges media from folders, removes duplicates by content hash,
+ and renames files into a sequential format.
