@@ -82,7 +82,6 @@ def resolve_target_arch() -> tuple[str, str]:
 def clean_build_artifacts(output_dir: Path):
     stem = Path(ENTRY_FILE).stem
     candidates = [
-        output_dir / f"{stem}.onefile-build",
         output_dir / f"{stem}.build",
         output_dir / f"{stem}.dist",
         output_dir / f"{APP_NAME}.dist",
@@ -90,13 +89,10 @@ def clean_build_artifacts(output_dir: Path):
         output_dir / APP_NAME,
     ]
     for path in candidates:
-        try:
-            if path.is_dir():
-                shutil.rmtree(path, ignore_errors=True)
-            elif path.exists():
-                path.unlink()
-        except Exception:
-            pass
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
 
 
 def load_app_metadata(root: Path) -> dict[str, str]:
@@ -262,86 +258,39 @@ def nuitka_base_cmd(root: Path, output_dir: Path) -> list[str]:
     if metadata_path.exists():
         cmd.append(f"--include-data-file={metadata_path}=app_metadata.json")
 
+    font_license = root / "build" / "fonts" / "OFL.txt"
+    if not font_license.is_file():
+        raise FileNotFoundError(f"Downloaded Kanit license not found: {font_license}")
+    cmd.append(f"--include-data-file={font_license}=Kanit-OFL.txt")
+
     return cmd
-
-
-def try_onefile() -> bool:
-    return os.environ.get("IMAGEMERGE_ONEFILE", "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def onefile_strict() -> bool:
-    return os.environ.get("IMAGEMERGE_ONEFILE_STRICT", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def binary_only() -> bool:
     return os.environ.get("IMAGEMERGE_BINARY_ONLY", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def windows_build_both() -> bool:
-    return os.environ.get("IMAGEMERGE_WINDOWS_BOTH", "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def run_build_with_fallback(root: Path, out_dir: Path, onefile_args: list[str], standalone_args: list[str]):
-    if try_onefile():
-        onefile_cmd = nuitka_base_cmd(root, out_dir) + onefile_args + [ENTRY_FILE]
-        try:
-            run_cmd(onefile_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
-            return "onefile"
-        except subprocess.CalledProcessError:
-            if onefile_strict():
-                raise
-            print("Onefile build failed on this environment, falling back to standalone build.")
-
-    standalone_cmd = nuitka_base_cmd(root, out_dir) + standalone_args + [ENTRY_FILE]
-    run_cmd(standalone_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
-    return "standalone"
+def reset_output_dir(output_dir: Path) -> None:
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
 
 
 def build_windows(root: Path):
     out_dir = root / "dist" / "windows"
+    reset_output_dir(out_dir)
     metadata = load_app_metadata(root)
     metadata_args = windows_metadata_args(root, metadata)
+    standalone_cmd = nuitka_base_cmd(root, out_dir) + [
+        "--windows-console-mode=attach",
+        *metadata_args,
+        ENTRY_FILE,
+    ]
+    run_cmd(standalone_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
 
-    if windows_build_both():
-        standalone_cmd = nuitka_base_cmd(root, out_dir) + [
-            "--windows-console-mode=attach",
-            *metadata_args,
-            ENTRY_FILE,
-        ]
-        run_cmd(standalone_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
-
-        binary_path = out_dir / (APP_NAME + ".dist") / (APP_NAME + ".exe")
-        print(f"PE standalone folder build ready: {binary_path}")
-        sign_windows_binary(binary_path)
-
-        onefile_out_dir = root / "dist" / "windows-onefile"
-        onefile_cmd = nuitka_base_cmd(root, onefile_out_dir) + [
-            "--onefile",
-            "--onefile-no-compression",
-            "--windows-console-mode=attach",
-            *metadata_args,
-            ENTRY_FILE,
-        ]
-        run_cmd(onefile_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(onefile_out_dir))
-
-        onefile_binary_path = onefile_out_dir / (APP_NAME + ".exe")
-        print(f"PE portable onefile build ready: {onefile_binary_path}")
-        sign_windows_binary(onefile_binary_path)
-        return
-
-    mode = run_build_with_fallback(
-        root,
-        out_dir,
-        ["--onefile", "--onefile-no-compression", "--windows-console-mode=attach", *metadata_args],
-        ["--windows-console-mode=attach", *metadata_args],
-    )
-    binary_path = out_dir / (APP_NAME + ".exe")
-    if mode == "onefile":
-        binary_path = out_dir / (APP_NAME + ".exe")
-        print(f"PE onefile build ready: {binary_path}")
-    else:
-        binary_path = out_dir / (APP_NAME + ".dist") / (APP_NAME + ".exe")
-        print(f"PE standalone folder build ready: {binary_path}")
+    binary_path = out_dir / f"{Path(ENTRY_FILE).stem}.dist" / f"{APP_NAME}.exe"
+    if not binary_path.is_file():
+        raise FileNotFoundError(f"Windows build did not produce: {binary_path}")
+    print(f"PE standalone folder build ready: {binary_path}")
 
     sign_windows_binary(binary_path)
 
@@ -351,29 +300,35 @@ def build_linux(root: Path):
         raise RuntimeError("Missing required tool 'patchelf'. Install it first (Ubuntu/Debian: sudo apt install -y patchelf)")
 
     out_dir = root / "dist" / "linux"
-    mode = run_build_with_fallback(root, out_dir, ["--onefile", "--onefile-no-compression"], [])
-    if mode == "onefile":
-        print(f"ELF build ready: {out_dir / APP_NAME}")
-    else:
-        print(f"ELF build ready: {out_dir / (APP_NAME + '.dist') / APP_NAME}")
+    reset_output_dir(out_dir)
+    standalone_cmd = nuitka_base_cmd(root, out_dir) + [ENTRY_FILE]
+    run_cmd(standalone_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_dir))
+
+    binary_path = out_dir / f"{Path(ENTRY_FILE).stem}.dist" / APP_NAME
+    if not binary_path.is_file():
+        raise FileNotFoundError(f"Linux build did not produce: {binary_path}")
+    print(f"ELF standalone build ready: {binary_path}")
 
 
 def build_macos(root: Path):
     out_bin_dir = root / "dist" / "macos-binary"
+    reset_output_dir(out_bin_dir)
     metadata = load_app_metadata(root)
 
-    mode = run_build_with_fallback(root, out_bin_dir, ["--onefile", "--onefile-no-compression"], [])
+    standalone_cmd = nuitka_base_cmd(root, out_bin_dir) + [ENTRY_FILE]
+    run_cmd(standalone_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_bin_dir))
 
-    if mode == "onefile":
-        print(f"Mach-O binary ready: {out_bin_dir / APP_NAME}")
-    else:
-        print(f"Mach-O binary ready: {out_bin_dir / (APP_NAME + '.dist') / APP_NAME}")
+    binary_path = out_bin_dir / f"{Path(ENTRY_FILE).stem}.dist" / APP_NAME
+    if not binary_path.is_file():
+        raise FileNotFoundError(f"macOS build did not produce: {binary_path}")
+    print(f"Mach-O standalone build ready: {binary_path}")
 
     if binary_only():
         print("Binary-only mode enabled; skipping macOS .app bundle build.")
         return
 
     out_app_dir = root / "dist" / "macos-app"
+    reset_output_dir(out_app_dir)
     app_cmd = nuitka_base_cmd(root, out_app_dir) + ["--macos-create-app-bundle"]
 
     macos_icon = resolve_macos_icon(root, metadata)
@@ -385,7 +340,38 @@ def build_macos(root: Path):
     app_cmd.append(ENTRY_FILE)
     run_cmd(app_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_app_dir))
 
-    print(f"App bundle ready: {out_app_dir / (APP_NAME + '.app')}")
+    app_bundle = out_app_dir / f"{APP_NAME}.app"
+    if not app_bundle.is_dir():
+        raise FileNotFoundError(f"macOS app bundle build did not produce: {app_bundle}")
+    print(f"App bundle ready: {app_bundle}")
+
+
+def clean_generated_build_files(root: Path) -> None:
+    generated_module = root / "src" / "media_merge" / "_embedded_fonts.py"
+    generated_module.unlink(missing_ok=True)
+
+    for generated_path in (
+        root / "build" / "fonts",
+        root / "build" / "ImageMerge.iconset",
+    ):
+        if generated_path.is_dir():
+            shutil.rmtree(generated_path)
+
+    generated_icns = root / "build" / "ImageMerge.icns"
+    generated_icns.unlink(missing_ok=True)
+
+    for output_name in ("windows", "linux", "macos-binary", "macos-app"):
+        output_dir = root / "dist" / output_name
+        cache_path = output_dir / f"{Path(ENTRY_FILE).stem}.build"
+        if cache_path.is_dir():
+            shutil.rmtree(cache_path)
+
+    build_dir = root / "build"
+    if build_dir.is_dir():
+        try:
+            build_dir.rmdir()
+        except OSError:
+            pass
 
 
 def main():
@@ -396,19 +382,26 @@ def main():
     print(f"Build host architecture: {host_arch}")
     print(f"Requested target architecture: {target_arch}")
 
-    run_cmd(
-        [sys.executable, str(root / "scripts" / "generate_embedded_locales.py")],
-        root,
-    )
+    try:
+        run_cmd(
+            [sys.executable, str(root / "scripts" / "generate_embedded_locales.py")],
+            root,
+        )
+        run_cmd(
+            [sys.executable, str(root / "scripts" / "prepare_embedded_fonts.py")],
+            root,
+        )
 
-    if system == "windows":
-        build_windows(root)
-    elif system == "linux":
-        build_linux(root)
-    elif system == "darwin":
-        build_macos(root)
-    else:
-        raise RuntimeError(f"Unsupported OS: {system}")
+        if system == "windows":
+            build_windows(root)
+        elif system == "linux":
+            build_linux(root)
+        elif system == "darwin":
+            build_macos(root)
+        else:
+            raise RuntimeError(f"Unsupported OS: {system}")
+    finally:
+        clean_generated_build_files(root)
 
 
 if __name__ == "__main__":

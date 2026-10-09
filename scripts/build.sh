@@ -10,10 +10,6 @@ if [[ "$(uname -s)" == "Linux" ]] && ! command -v patchelf >/dev/null 2>&1; then
   exit 1
 fi
 
-unset IMAGEMERGE_ONEFILE
-unset IMAGEMERGE_ONEFILE_STRICT
-unset IMAGEMERGE_BINARY_ONLY
-
 cd "$root_dir"
 python3 scripts/build_nuitka.py
 

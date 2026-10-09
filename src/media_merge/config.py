@@ -8,7 +8,13 @@ from pathlib import Path
 from PySide6.QtCore import QByteArray
 from PySide6.QtGui import QFontDatabase
 
-from ._embedded_fonts import EMBEDDED_FONTS
+try:
+    from ._embedded_fonts import EMBEDDED_FONTS
+except ModuleNotFoundError as exc:
+    if exc.name != "src.media_merge._embedded_fonts":
+        raise
+    EMBEDDED_FONTS: dict[str, str] = {}
+
 from ._embedded_locales import EMBEDDED_LOCALES as FILE_EMBEDDED_LOCALES
 
 APP_FALLBACK_TITLE = "ImageMerge"
@@ -113,16 +119,13 @@ def setup_app_fonts(lang: str = DEFAULT_LANG) -> str:
 
     loaded_family = None
     for encoded_data in EMBEDDED_FONTS.values():
-        try:
-            font_bytes = base64.b64decode(encoded_data)
-            font_id = QFontDatabase.addApplicationFontFromData(QByteArray(font_bytes))
-            if font_id == -1:
-                continue
-            families = QFontDatabase.applicationFontFamilies(font_id)
-            if families and loaded_family is None:
-                loaded_family = families[0]
-        except Exception:
+        font_bytes = base64.b64decode(encoded_data)
+        font_id = QFontDatabase.addApplicationFontFromData(QByteArray(font_bytes))
+        if font_id == -1:
             continue
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        if families and loaded_family is None:
+            loaded_family = families[0]
 
     script_font_candidates: dict[str, tuple[str, ...]] = {
         "th": ("Leelawadee UI", "Tahoma", "Noto Sans Thai", "Noto Sans"),
@@ -169,4 +172,3 @@ def detect_language() -> str:
         if base in SUPPORTED_LANGS:
             return base
     return DEFAULT_LANG
-

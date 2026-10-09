@@ -50,8 +50,7 @@ winget install TamKungZ.ImageMerge
 ```
 
 - Download and run `ImageMerge-windows-x64.msi`
-- Or portable folder: extract `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
-- Or portable single executable: download `ImageMerge-windows-x64-portable.exe`
+- Or extract the standalone folder package `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
 - Microsoft Store submission asset is also generated as `ImageMergeGUI-windows-x64.msix`
 - WinGet automation is configured for package id `TamKungZ.ImageMerge`
 
@@ -154,7 +153,7 @@ This means modified date will not cause `.webp` files to jump before `.png` or `
 - `worker.py`: Qt worker thread wrapper
 - `ui/app.py`: main PySide6 window
 - `ui/widgets.py`: reusable UI widgets
-- `_embedded_fonts.py` and `_embedded_locales.py`: bundled resources used at runtime
+- `_embedded_locales.py`: generated translation fallback used at runtime
 
 Build tooling and its locale generator live in `scripts/`. Translation sources,
 application assets, and OS packaging manifests remain in `locales/`, `assets/`,
@@ -163,7 +162,10 @@ and `packaging/`.
 Application icons live in `assets/icons/`: `app-icon.svg`, `app-icon-1024.png`,
 and `app-icon.ico` are the canonical source files. Platform-specific PNG sizes
 are derived from the 1024px source, while the macOS `.icns` icon is generated
-into `build/` during a macOS build. Fonts are kept under `assets/fonts/`.
+into `build/` during a macOS build. Kanit fonts are downloaded from a pinned
+Google Fonts revision during packaging builds, embedded into the application,
+and removed from the working tree afterward; the font license is included in
+the packaged output. Source runs use the system font until a packaged build.
 
 ## Build (Nuitka)
 
@@ -183,14 +185,16 @@ Then use the build scripts (or run `python scripts/build_nuitka.py` directly):
 scripts\build.bat
 ```
 
-The build step generates `src/media_merge/_embedded_locales.py` from `locales/*.json` before compiling.
+The build step generates `src/media_merge/_embedded_locales.py` from `locales/*.json`
+and downloads/verifies the Kanit font files before compiling. A network connection
+is required for the first build; the font source revision and checksums are pinned
+in `scripts/prepare_embedded_fonts.py`.
 
 Windows build also reads `app_metadata.json` and injects version/company/product metadata into the executable.
 
 `scripts/build_nuitka.py` detects the current OS and builds native output:
 
 - **Windows**: PE executable (`ImageMerge.exe`) under `dist/windows/ImageMerge.dist/`
-  - Local `scripts\build.bat` also builds a portable onefile executable at `dist/windows-onefile/ImageMerge.exe`
 - **Linux**: ELF binary (`ImageMerge`) under `dist/linux/ImageMerge.dist/`
 - **macOS**:
   - Mach-O binary under `dist/macos-binary/ImageMerge.dist/`
@@ -204,22 +208,8 @@ Architecture notes:
 - The build scripts recognize these architecture labels: `x86`, `x64`, `arm`, `arm64`.
 - To declare a target architecture in local/self-hosted builds, set `IMAGEMERGE_TARGET_ARCH` (cross-compilation toolchains are not auto-configured).
 
-Default build mode is `standalone` for reliability.
-
-To force `onefile` mode (experimental on some Windows + Python/Nuitka versions):
-
-```powershell
-$env:IMAGEMERGE_ONEFILE=1
-./scripts/build.bat
-```
-
-If onefile fails during payload step, update packaging deps and retry:
-
-```powershell
-python -m pip install -U "Nuitka[onefile]" zstandard
-```
-
-Also exclude your build folder from Windows Defender/antivirus scan during build.
+Builds use Nuitka standalone output only. Intermediate compiler caches, generated
+font files, and temporary macOS icon files are removed when the build completes.
 
 ## Windows Metadata + Trust
 
@@ -250,7 +240,7 @@ For better SmartScreen reputation in production:
 
 - UI translations are embedded in code (no external locale files required at runtime).
 - Source translation files are in `locales/`; the embedded catalog is generated to `src/media_merge/_embedded_locales.py`.
-- Kanit fonts are embedded in code and loaded at runtime (no external font files required at runtime).
+- Kanit is licensed under the SIL Open Font License; the build downloads the pinned font sources and includes the license with the packaged application.
 - Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.
 
 ## Screenshots

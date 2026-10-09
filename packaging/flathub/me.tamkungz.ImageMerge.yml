@@ -20,7 +20,12 @@ modules:
   - name: imagemerge
     buildsystem: simple
     build-commands:
-      - install -d /app/bin /app/lib/ImageMerge /app/share/applications /app/share/metainfo /app/share/icons/hicolor/scalable/apps
+      - install -d /app/bin /app/lib/ImageMerge /app/share/applications /app/share/metainfo /app/share/icons/hicolor/scalable/apps /tmp/imagemerge-font-sources
+      - cp Kanit-Regular.ttf Kanit-Bold.ttf Kanit-Italic.ttf OFL.txt /tmp/imagemerge-font-sources/
+      - rm -f Kanit-Regular.ttf Kanit-Bold.ttf Kanit-Italic.ttf OFL.txt
+      - IMAGEMERGE_FONT_SOURCE_DIR=/tmp/imagemerge-font-sources python3 scripts/prepare_embedded_fonts.py
+      - install -Dm644 build/fonts/OFL.txt /app/lib/ImageMerge/Kanit-OFL.txt
+      - rm -rf build/fonts
       - cp -a . /app/lib/ImageMerge/
       - |
         cat > /app/bin/ImageMerge << 'EOF'
@@ -31,7 +36,20 @@ modules:
       - install -Dm644 packaging/flatpak/me.tamkungz.ImageMerge.desktop /app/share/applications/me.tamkungz.ImageMerge.desktop
       - install -Dm644 packaging/flatpak/me.tamkungz.ImageMerge.metainfo.xml /app/share/metainfo/me.tamkungz.ImageMerge.metainfo.xml
       - install -Dm644 assets/icons/app-icon.svg /app/share/icons/hicolor/scalable/apps/me.tamkungz.ImageMerge.svg
+      - rm -rf /tmp/imagemerge-font-sources
     sources:
       - type: archive
         url: https://github.com/TamKungZ/ImageMergePy/archive/refs/tags/v1.0.2.tar.gz
         sha256: 5ff85b77039931787e7082a1f1ab35d109de616d64eb471f692a39dd2c1e0d23
+      - type: file
+        url: https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/kanit/Kanit-Regular.ttf
+        sha256: 27170c049660b2f962d3ed28441fd20f4c743503ca031fec9c2b4542d6c52736
+      - type: file
+        url: https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/kanit/Kanit-Bold.ttf
+        sha256: 5dec5b080dab13de9d2295437c0ff3ec05c9e75587dfc31358c005eb4efa5e70
+      - type: file
+        url: https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/kanit/Kanit-Italic.ttf
+        sha256: 7cbe69393a7bf948dd49e575369344a907f06b0182e7a618c033c67208abb27d
+      - type: file
+        url: https://raw.githubusercontent.com/google/fonts/bd8f81ddb5c74d5c8897b36ad88b440266245103/ofl/kanit/OFL.txt
+        sha256: eb998cc5a685b240cdb46a0b5747e70334c8c57bbd7b1f6b044d75719358df67

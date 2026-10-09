@@ -1,2 +1,2 @@
-Nuitka[onefile]
+Nuitka
 PySide6

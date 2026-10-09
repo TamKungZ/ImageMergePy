@@ -25,6 +25,7 @@ pip-wheel-metadata/
 *.manifest
 *.pyz
 nuitka-crash-report.xml
+src/media_merge/_embedded_fonts.py
 
 # IDE / OS
 .vscode/
