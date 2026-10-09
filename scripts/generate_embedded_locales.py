@@ -3,9 +3,9 @@ from pathlib import Path
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parents[1]
     locales_dir = root / "locales"
-    output_file = root / "embedded_locales.py"
+    output_file = root / "src" / "media_merge" / "_embedded_locales.py"
 
     embedded_locales: dict[str, dict[str, str]] = {}
     for locale_file in sorted(locales_dir.glob("*.json")):

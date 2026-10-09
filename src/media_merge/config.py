@@ -8,8 +8,8 @@ from pathlib import Path
 from PySide6.QtCore import QByteArray
 from PySide6.QtGui import QFontDatabase
 
-from embedded_fonts import EMBEDDED_FONTS
-from embedded_locales import EMBEDDED_LOCALES as FILE_EMBEDDED_LOCALES
+from ._embedded_fonts import EMBEDDED_FONTS
+from ._embedded_locales import EMBEDDED_LOCALES as FILE_EMBEDDED_LOCALES
 
 APP_FALLBACK_TITLE = "ImageMerge"
 APP_DIR = Path(__file__).resolve().parents[2]
@@ -169,5 +169,4 @@ def detect_language() -> str:
         if base in SUPPORTED_LANGS:
             return base
     return DEFAULT_LANG
-
 

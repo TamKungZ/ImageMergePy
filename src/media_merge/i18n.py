@@ -1,7 +1,7 @@
 import json
 
 from .config import DEFAULT_LANG, LOCALES_DIR, SUPPORTED_LANGS
-from embedded_locales import EMBEDDED_LOCALES as FILE_EMBEDDED_LOCALES
+from ._embedded_locales import EMBEDDED_LOCALES as FILE_EMBEDDED_LOCALES
 
 class I18n:
     def __init__(self, lang: str):
@@ -44,5 +44,4 @@ def t_identity(key: str, **kwargs) -> str:
         return key.format(**kwargs)
     except Exception:
         return key
-
 

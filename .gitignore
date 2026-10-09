@@ -24,6 +24,7 @@ pip-wheel-metadata/
 *.spec
 *.manifest
 *.pyz
+nuitka-crash-report.xml
 
 # IDE / OS
 .vscode/

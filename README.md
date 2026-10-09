@@ -31,7 +31,7 @@ Current app version: `1.1.0`
 ## Install (source)
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ## Install (packaged)
@@ -154,33 +154,38 @@ This means modified date will not cause `.webp` files to jump before `.png` or `
 - `worker.py`: Qt worker thread wrapper
 - `ui/app.py`: main PySide6 window
 - `ui/widgets.py`: reusable UI widgets
+- `_embedded_fonts.py` and `_embedded_locales.py`: bundled resources used at runtime
+
+Build tooling and its locale generator live in `scripts/`. Translation sources,
+application assets, and OS packaging manifests remain in `locales/`, `assets/`,
+and `packaging/`.
 
 ## Build (Nuitka)
 
 Install dependencies first:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Then use the build scripts (or run `python build_nuitka.py` directly):
+Then use the build scripts (or run `python scripts/build_nuitka.py` directly):
 
 ```bash
-./build.sh
+./scripts/build.sh
 ```
 
 ```bat
-build.bat
+scripts\build.bat
 ```
 
-Build step will auto-generate `embedded_locales.py` from `locales/*.json` before compiling.
+The build step generates `src/media_merge/_embedded_locales.py` from `locales/*.json` before compiling.
 
 Windows build also reads `app_metadata.json` and injects version/company/product metadata into the executable.
 
-`build_nuitka.py` detects the current OS and builds native output:
+`scripts/build_nuitka.py` detects the current OS and builds native output:
 
 - **Windows**: PE executable (`ImageMerge.exe`) under `dist/windows/ImageMerge.dist/`
-  - Local `build.bat` also builds a portable onefile executable at `dist/windows-onefile/ImageMerge.exe`
+  - Local `scripts\build.bat` also builds a portable onefile executable at `dist/windows-onefile/ImageMerge.exe`
 - **Linux**: ELF binary (`ImageMerge`) under `dist/linux/ImageMerge.dist/`
 - **macOS**:
   - Mach-O binary under `dist/macos-binary/ImageMerge.dist/`
@@ -200,7 +205,7 @@ To force `onefile` mode (experimental on some Windows + Python/Nuitka versions):
 
 ```powershell
 $env:IMAGEMERGE_ONEFILE=1
-./build.bat
+./scripts/build.bat
 ```
 
 If onefile fails during payload step, update packaging deps and retry:
@@ -226,7 +231,7 @@ $env:IMAGEMERGE_SIGN=1
 $env:IMAGEMERGE_SIGN_PFX="C:\secure\codesign.pfx"
 $env:IMAGEMERGE_SIGN_PASSWORD="<pfx-password>"
 $env:IMAGEMERGE_SIGN_TIMESTAMP="http://timestamp.digicert.com"
-./build.bat
+./scripts/build.bat
 ```
 
 For better SmartScreen reputation in production:
@@ -239,7 +244,7 @@ For better SmartScreen reputation in production:
 ## Notes
 
 - UI translations are embedded in code (no external locale files required at runtime).
-- Source translation files are in `locales/en.json` and `locales/th.json`; embedded module is generated to `embedded_locales.py`.
+- Source translation files are in `locales/`; the embedded catalog is generated to `src/media_merge/_embedded_locales.py`.
 - Kanit fonts are embedded in code and loaded at runtime (no external font files required at runtime).
 - Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.
 

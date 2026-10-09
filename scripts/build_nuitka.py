@@ -394,14 +394,17 @@ def build_macos(root: Path):
 
 
 def main():
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parents[1]
     system = platform.system().lower()
     host_arch, target_arch = resolve_target_arch()
 
     print(f"Build host architecture: {host_arch}")
     print(f"Requested target architecture: {target_arch}")
 
-    run_cmd([sys.executable, "generate_embedded_locales.py"], root)
+    run_cmd(
+        [sys.executable, str(root / "scripts" / "generate_embedded_locales.py")],
+        root,
+    )
 
     if system == "windows":
         build_windows(root)

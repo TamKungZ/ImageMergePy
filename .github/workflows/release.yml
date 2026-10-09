@@ -41,7 +41,7 @@ jobs:
       - name: Build with Nuitka
         env:
           IMAGEMERGE_WINDOWS_BOTH: ${{ runner.os == 'Windows' && '1' || '' }}
-        run: python build_nuitka.py
+        run: python scripts/build_nuitka.py
 
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
