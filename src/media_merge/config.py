@@ -115,7 +115,7 @@ LANGUAGE_NATIVE_NAMES = {
 
 def setup_app_fonts(lang: str = DEFAULT_LANG) -> str:
     lang = (lang or DEFAULT_LANG).lower()
-    db = QFontDatabase()
+    available_families = set(QFontDatabase.families())
 
     loaded_family = None
     for encoded_data in EMBEDDED_FONTS.values():
@@ -141,7 +141,7 @@ def setup_app_fonts(lang: str = DEFAULT_LANG) -> str:
         return loaded_family
 
     for font in script_font_candidates.get(lang, ()):
-        if db.hasFamily(font):
+        if font in available_families:
             return font
 
     if loaded_family:
@@ -149,15 +149,15 @@ def setup_app_fonts(lang: str = DEFAULT_LANG) -> str:
 
     if os.name == "nt":
         for font in ("Segoe UI", "Arial"):
-            if db.hasFamily(font):
+            if font in available_families:
                 return font
     elif sys.platform == "darwin":
         for font in ("SF Pro Text", "Helvetica Neue", "Helvetica", "Arial"):
-            if db.hasFamily(font):
+            if font in available_families:
                 return font
     else:
         for font in ("Noto Sans", "DejaVu Sans", "Liberation Sans", "FreeSans"):
-            if db.hasFamily(font):
+            if font in available_families:
                 return font
 
     return "Sans Serif"

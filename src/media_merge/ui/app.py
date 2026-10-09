@@ -40,6 +40,7 @@ from ..media_ops import (
 )
 from ..worker import ProcessWorker
 from .layout import AppLayoutMixin
+from .styles import global_stylesheet
 from .widgets import FolderOnlyRow, SourceRow
 
 class App(AppLayoutMixin, QMainWindow):
@@ -103,14 +104,14 @@ class App(AppLayoutMixin, QMainWindow):
         else:
             self.main_empty_label.hide()
 
-    def _on_lang_selector_changed(self, _index: int):
+    def _on_lang_selector_changed(self):
         lang = self.lang_selector.currentData()
         if lang not in SUPPORTED_LANGS or lang == self.i18n.lang:
             return
         self.i18n.lang = lang
         self.font_family = setup_app_fonts(lang)
         self._apply_dark_palette()
-        self.setStyleSheet(self._global_stylesheet())
+        self.setStyleSheet(global_stylesheet(self.font_family))
         self._retranslate_ui()
 
     def _build_about_text(self) -> str:
@@ -574,4 +575,3 @@ class App(AppLayoutMixin, QMainWindow):
 
     def _on_worker_process_error(self, msg: str):
         QMessageBox.critical(self, self.t("app_title"), msg)
-

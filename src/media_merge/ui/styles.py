@@ -1,5 +1,4 @@
 
-
 from ..config import (
     C_ACCENT,
     C_ACCENT_DIM,
@@ -14,6 +13,7 @@ from ..config import (
     C_TEXT2,
     C_TEXT3,
 )
+
 
 def global_stylesheet(font_family: str) -> str:
     ff = font_family
