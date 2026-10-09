@@ -22,11 +22,25 @@ Current app version: `2.0.0`
 - Safe temp workspace is enabled by default to stage output changes before applying them
 - New desktop UI built with `PySide6`
 - Native builds with `Nuitka`
+- Cross-language native SDK with a C ABI for calling ImageMerge from other programs
 
 ## Requirements
 
 - Python 3.10+ (recommended)
 - OS-specific native builds are supported on Windows, Linux, and macOS
+- The optional Native SDK requires the Rust stable toolchain
+
+## Native SDK
+
+The native SDK provides a C ABI bridge for developers who want to invoke
+ImageMerge from C, C++, C#, Rust, or another language without embedding Python.
+It runs the existing ImageMerge CLI as a child process to keep processing
+behavior consistent. Build instructions, the C header, and examples are in
+[`native/imagemerge-sdk`](native/imagemerge-sdk/README.md).
+Manual release builds also publish an architecture-specific
+`ImageMerge-SDK-<platform>-<architecture>.zip` containing the shared library
+and C header, plus the matching standalone app runtime. The bundle can be used
+without separately resolving ImageMerge's native runtime dependencies.
 
 ## Install (source)
 
