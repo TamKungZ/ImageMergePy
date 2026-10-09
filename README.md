@@ -1,325 +1,91 @@
-# ImageMergePy
+# ImageMerge
 
-A GUI tool to merge images/videos from multiple folders, remove duplicates with SHA-256, and rename files into a clean sequential format.
-
-Current app version: `2.0.0`
+ImageMerge combines images and videos from folders, removes duplicate files,
+and renames the results into an ordered sequence.
 
 ## Features
 
-- Merge media from multiple input folders into one output folder
-- De-duplicate files using `SHA-256 + file extension`
-- Supports 5 operation modes
-  - `copy_keep`: copy only, keep source files
-  - `copy_delete`: copy, then delete source files
-  - `move`: move files from input to output
-  - `main_folder`: organize the output folder first, then optionally merge imported folders
-  - `inside_folder`: organize media already inside the selected folder
-- Set a per-folder `prefix`
-- Rename files as `prefix-0001.jpg` or `0001.jpg`
-- Keep output ordered with deterministic extension groups: images first, videos last
-- Image sorting groups extensions first: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`, `.tiff`
-- Within each extension group, numeric names such as `1.png`, `02.png`, `10.png`, and `1(1).jpg` are sorted by their number before final renaming
-- Safe temp workspace is enabled by default to stage output changes before applying them
-- New desktop UI built with `PySide6`
-- Native builds with `Nuitka`
-- Cross-language native SDK with a C ABI for calling ImageMerge from other programs
+- Merge files from multiple folders, or organize files already in one folder.
+- Copy, move, or copy and delete source files.
+- Detect duplicates by file content and extension.
+- Add an optional prefix to filenames.
+- Stage changes in a temporary workspace by default; staged changes are applied
+  only when processing completes.
+- Sort images before videos, with a consistent extension and filename order.
 
-## Requirements
+## Download and install
 
-- Python 3.10+ (recommended)
-- OS-specific native builds are supported on Windows, Linux, and macOS
-- The optional Native SDK requires the Rust stable toolchain
-
-## Native SDK
-
-The native SDK provides a C ABI bridge for developers who want to invoke
-ImageMerge from C, C++, C#, Rust, or another language without embedding Python.
-It runs the existing ImageMerge CLI as a child process to keep processing
-behavior consistent. Build instructions, the C header, and examples are in
-[`native/imagemerge-sdk`](native/imagemerge-sdk/README.md).
-Manual release builds also publish an architecture-specific
-`ImageMerge-SDK-<platform>-<architecture>.zip` containing the shared library
-and C header, plus the matching standalone app runtime. The bundle can be used
-without separately resolving ImageMerge's native runtime dependencies.
-
-## Install (source)
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-## Install (packaged)
-
-Prebuilt packages are published in GitHub Releases:
-
-- Release page: `https://github.com/TamKungZ/ImageMergePy/releases`
-- Release builds and store submissions are started manually. See
-  [version-specific release notes](Releases.md).
+Download the package for your operating system from
+[GitHub Releases](https://github.com/TamKungZ/ImageMergePy/releases).
 
 ### Windows
 
-- Microsoft Store: `https://apps.microsoft.com/detail/9ndnkpjpzt67`
-- WinGet:
-
-```powershell
-winget install TamKungZ.ImageMerge
-```
-
-- Download and run `ImageMerge-windows-x64.msi`. The installer adds its
-  installation folder to the system `PATH`; open a new terminal after install
-  and invoke the CLI with `ImageMerge`.
-- Or extract the standalone folder package `ImageMerge-windows-x64.zip`, then run `ImageMerge.exe`
-- Microsoft Store submission asset: `ImageMergeGUI-windows-x64.msix`
-- WinGet manifest submission is available as a manually started workflow for
-  package id `TamKungZ.ImageMerge`
+- Install from the [Microsoft Store](https://apps.microsoft.com/detail/9ndnkpjpzt67)
+  or with WinGet: `winget install TamKungZ.ImageMerge`.
+- Or download and run `ImageMerge-windows-x64.msi`.
+- The standalone ZIP does not install the app; extract it and run
+  `ImageMerge.exe`.
+- The MSI adds `ImageMerge` to `PATH`. Open a new terminal to use the CLI.
 
 ### Linux
 
-- Debian/Ubuntu/Zorin: install `ImageMerge-linux-x64.deb`
+- Ubuntu: install the `.deb` from Releases, or use the PPA on Ubuntu 22.04,
+  24.04, or 26.04:
 
-```bash
-sudo apt install ./ImageMerge-linux-x64.deb
-```
+  ```bash
+  sudo add-apt-repository ppa:tamkungz/stable
+  sudo apt update
+  sudo apt install imagemerge
+  ```
 
-- Ubuntu PPA (Ubuntu 22.04, 24.04, and 26.04):
-
-```bash
-sudo add-apt-repository ppa:tamkungz/stable
-sudo apt update
-sudo apt install imagemerge
-```
-
-- `.deb` and `.rpm` packages install the `imagemerge` command into `/usr/bin`,
-  so it is immediately available on `PATH`.
-- Fedora/RHEL/openSUSE: install `ImageMerge-linux-x64.rpm`
-
-```bash
-sudo rpm -Uvh ./ImageMerge-linux-x64.rpm
-```
-
-- AppImage: download `ImageMerge-linux-x64.AppImage`
-
-```bash
-chmod +x ImageMerge-linux-x64.AppImage
-./ImageMerge-linux-x64.AppImage
-```
-
-- Flatpak bundle: `ImageMerge-linux-x64.flatpak`
-- Snap artifact: `ImageMerge-linux-x64.snap` (store upload is manually started)
+- Fedora and compatible distributions: install the `.rpm`.
+- AppImage, Flatpak, and Snap packages are also available in Releases.
+- The `.deb`, `.rpm`, and PPA packages provide the `imagemerge` command.
 
 ### macOS
 
-```bash
-brew tap TamKungZ/tap
-brew install --cask imagemerge
-```
+- Install with Homebrew:
 
-- App bundle zip: `ImageMerge-macos-app-arm64.zip` or `ImageMerge-macos-app-x64.zip` (contains `ImageMerge.app`)
-- Binary zip: `ImageMerge-macos-binary-arm64.zip` or `ImageMerge-macos-binary-x64.zip`
-- Homebrew cask update is manually started and creates a pull request for review
-- Direct-download app bundles are not currently signed or notarized; macOS
-  Gatekeeper may block them.
+  ```bash
+  brew tap TamKungZ/tap
+  brew install --cask imagemerge
+  ```
 
-## Run (source)
+- Or download the app bundle for Apple Silicon (`arm64`) or Intel (`x64`).
+  Direct-download bundles are not signed or notarized, so Gatekeeper may block
+  them.
 
-```bash
-python MainApp.py
-```
+## Command line
 
-## Run (CLI)
-
-Use CLI mode without opening GUI:
+Packaged builds can run without opening the GUI. Repeat `--input` for each
+source folder; a prefix can be added as `PATH::PREFIX`.
 
 ```bash
-python MainApp.py --cli --input "/path/to/folderA::full" --input "/path/to/folderB::short" --output "/path/to/output" --mode copy_keep
+imagemerge --input "/path/to/photos::trip" --input "/path/to/videos" --output "/path/to/output" --mode copy_keep
 ```
 
-```bash
-ImageMerge --cli --input "/path/a::full" --input "/path/b::short" --output "/path/out" --mode copy_keep
-```
+On Windows, use `ImageMerge` instead of `imagemerge`.
 
-After installing the Windows MSI, `ImageMerge` is available on `PATH`. After
-installing a Linux `.deb` or `.rpm`, use `imagemerge` directly:
+Available modes:
 
-```bash
-imagemerge --input "/path/a::full" --output "/path/out" --mode copy_keep
-```
+- `copy_keep` (default): copy files and keep the originals.
+- `copy_delete`: copy files, then delete the originals.
+- `move`: move files to the output folder.
+- `main_folder`: organize the output folder, then optionally import other
+  folders. No `--input` is required.
+- `inside_folder`: organize files in the output folder in place.
 
-Ubuntu PPA source uploads are prepared by the manual
-[`publish-launchpad.yml`](.github/workflows/publish-launchpad.yml) workflow
-after a GitHub Release is published. It uploads to
-[`ppa:tamkungz/stable`](https://launchpad.net/~tamkungz/+archive/ubuntu/stable)
-for Jammy, Noble, and Resolute. The PPA package is amd64-only and wraps the
-published standalone Linux runtime; it does not rebuild the application from
-Python source. The upload requires the existing GPG secrets (`GPG_PRIVATE_KEY`,
-`GPG_PASSPHRASE`, and `GPG_KEY_ID`) and a maintainer email registered with
-Launchpad and the signing key. Import the corresponding public GPG key into the
-Launchpad account before the first upload.
+Input folders must already exist. `--clear-output` removes media files from the
+output before processing. `--remove-duplicates` applies only to
+`inside_folder`; `--allow-duplicates` imports matching files instead of
+skipping them. Safe temporary staging is on by default; use `--no-safe-temp` to
+write directly to the output folder.
 
-CLI options:
+## For developers
 
-- `--input PATH[::PREFIX]` (repeatable)
-- `--output PATH`
-- `--mode copy_keep|copy_delete|move|main_folder|inside_folder`
-- `--clear-output`
-- `--remove-duplicates`
-- `--no-safe-temp`
-- `--lang ar|de|en|es|fr|id|ja|ko|ru|th|vi|zh`
+Run from source with Python 3.10 or later, install the dependencies in
+`requirements.txt`, then launch with `python MainApp.py`. The native C ABI SDK
+for calling ImageMerge from other languages is documented in
+[`native/imagemerge-sdk`](native/imagemerge-sdk/README.md).
 
-Input paths must already exist and be directories. `--remove-duplicates` is only
-valid with `--mode inside_folder` and cannot be combined with `--allow-duplicates`.
-`--clear-output` cannot be combined with `--mode inside_folder`, which organizes
-the selected output folder in place.
-
-In packaged builds, run the same options directly from the app binary (Windows/Linux/macOS).
-
-## Sorting Rules
-
-ImageMerge assigns output numbers after sorting media in a stable, predictable order:
-
-1. Images are processed before videos.
-2. Image files are grouped by extension in this order: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.gif`, `.tiff`.
-3. Files inside the same extension group are sorted by numeric filename when possible.
-4. Existing prefixes are preserved when reorganizing files already named like `trip-0001.jpg`.
-5. Video files use their own extension order after images.
-
-Example:
-
-```text
-1.png      -> 0001.png
-02.png     -> 0002.png
-10.png     -> 0003.png
-12.png     -> 0004.png
-1.jpg      -> 0005.jpg
-1(1).jpg   -> 0006.jpg
-1.webp     -> 0007.webp
-```
-
-This means modified date will not cause `.webp` files to jump before `.png` or `.jpg` groups during normal merge numbering.
-
-## Source Layout
-
-`MainApp.py` is kept as the launch entry point. The application code is split under `src/media_merge/`:
-
-- `config.py`: metadata, constants, fonts, language discovery
-- `media_ops.py`: media scanning, sorting, duplicate detection, renaming, copy/move logic
-- `cli.py`: command-line interface
-- `worker.py`: Qt worker thread wrapper
-- `ui/app.py`: main PySide6 window
-- `ui/widgets.py`: reusable UI widgets
-- `_embedded_locales.py`: generated translation fallback used at runtime
-
-Build tooling and its locale generator live in `scripts/`. Translation sources,
-application assets, and OS packaging manifests remain in `locales/`, `assets/`,
-and `packaging/`.
-
-Application icons live in `assets/icons/`: `app-icon.svg`, `app-icon-1024.png`,
-and `app-icon.ico` are the canonical source files. Platform-specific PNG sizes
-are derived from the 1024px source, while the macOS `.icns` icon is generated
-into `build/` during a macOS build. Kanit fonts are downloaded from a pinned
-Google Fonts revision during packaging builds, embedded into the application,
-and removed from the working tree afterward; the font license is included in
-the packaged output. Source runs use the system font until a packaged build.
-
-## Build (Nuitka)
-
-Install dependencies first:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-Then use the build scripts (or run `python scripts/build_nuitka.py` directly):
-
-```bash
-./scripts/build.sh
-```
-
-```bat
-scripts\build.bat
-```
-
-The build step generates `src/media_merge/_embedded_locales.py` from `locales/*.json`
-and downloads/verifies the Kanit font files before compiling. A network connection
-is required for the first build; the font source revision and checksums are pinned
-in `scripts/prepare_embedded_fonts.py`.
-
-Windows build also reads `app_metadata.json` and injects version/company/product metadata into the executable.
-
-`scripts/build_nuitka.py` detects the current OS and builds native output:
-
-- **Windows**: PE executable (`ImageMerge.exe`) under `dist/windows/ImageMerge.dist/`
-- **Linux**: ELF binary (`ImageMerge`) under `dist/linux/ImageMerge.dist/`
-- **macOS**:
-  - Mach-O binary under `dist/macos-binary/ImageMerge.dist/`
-  - `.app` bundle under `dist/macos-app/ImageMerge.app`
-
-Note: cross-compiling to another OS is not configured; run the build on each target OS.
-
-Architecture notes:
-
-- Default CI runners currently publish x64 artifacts.
-- The build scripts recognize these architecture labels: `x86`, `x64`, `arm`, `arm64`.
-- To declare a target architecture in local/self-hosted builds, set `IMAGEMERGE_TARGET_ARCH` (cross-compilation toolchains are not auto-configured).
-
-Builds use Nuitka standalone output only. Intermediate compiler caches, generated
-font files, and temporary macOS icon files are removed when the build completes.
-
-## Windows Metadata + Trust
-
-Set app metadata in `app_metadata.json`:
-
-- `company_name`, `product_name`, `file_description`
-- `file_version`, `product_version`
-- `icon_ico` (optional `.ico` path)
-
-Optional signing is supported during build:
-
-```powershell
-$env:IMAGEMERGE_SIGN=1
-$env:IMAGEMERGE_SIGN_PFX="C:\secure\codesign.pfx"
-$env:IMAGEMERGE_SIGN_PASSWORD="<pfx-password>"
-$env:IMAGEMERGE_SIGN_TIMESTAMP="http://timestamp.digicert.com"
-./scripts/build.bat
-```
-
-For better SmartScreen reputation in production:
-
-- Use a valid OV/EV code-signing certificate (EV is fastest for reputation).
-- Keep publisher name consistent across releases.
-- Sign both executable and installer.
-- Avoid frequent publisher/certificate changes.
-
-## Notes
-
-- UI translations are embedded in code (no external locale files required at runtime).
-- Source translation files are in `locales/`; the embedded catalog is generated to `src/media_merge/_embedded_locales.py`.
-- Kanit is licensed under the SIL Open Font License; the build downloads the pinned font sources and includes the license with the packaged application.
-- Set `IMAGEMERGE_LANG=en` or `IMAGEMERGE_LANG=th` to force language.
-
-## Screenshots
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-start.png" alt="ImageMerge Start" width="100%" />
-    </td>
-    <td width="50%">
-      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-mode.png" alt="ImageMerge Mode" width="100%" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-options.png" alt="ImageMerge Options" width="100%" />
-    </td>
-    <td width="50%">
-      <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-add.png" alt="ImageMerge Add" width="100%" />
-    </td>
-  </tr>
-</table>
-
-<p align="center">
-  <img src="https://dev.tamkungz.me/assets-image/imagemerge/imagemerge-icon.png" alt="ImageMerge Icon" width="20%" />
-</p>
-
-*By TamKungZ_*
+See [Releases.md](Releases.md) for version history.
