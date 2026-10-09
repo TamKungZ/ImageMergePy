@@ -28,15 +28,24 @@ Priority 2: Extension             (compare only within the same media type)
 └─ Videos: .mp4 → .mov → .mkv → .avi → .webm → .m4v → .wmv → .flv → .ts → .mts
 
 Priority 3: Filename group        (compare only within the same extension)
-├─ IMG + number (IMG_2, IMG_10)
+├─ IMG + number (IMG_2, IMG_10; this group is only for IMG-style names)
 ├─ UUID/hash-style name
-└─ Other names
+├─ Other names with a leading number (2.png, 10.png, 2-holiday.png)
+└─ Other names without a recognized leading number (holiday.png, vacation.png)
 
 Priority 4: Order within group
 ├─ IMG + number: number → file timestamp → name
 ├─ UUID/hash:    file timestamp → name
-└─ Other names:  leading number → duplicate suffix (1) → file timestamp → name
+├─ Leading number: number → duplicate suffix (1) → file timestamp → name
+└─ Other names:    file timestamp → name
 ```
+
+For example, `IMG_2.jpg` and `IMG_10.jpg` are in the first filename group;
+`2.jpg` and `10.jpg` are in **Other names with a leading number** and sort
+numerically (`2.jpg` before `10.jpg`). Word-based names, names in any language,
+and other names that do not start with a recognized number are in the final
+**Other names** group; they sort by file timestamp, then name. The filename
+groups are checked in the order shown above.
 
 Numbers are compared numerically (`2` before `10`); timestamps are oldest
 first. For Merge, the timestamp is the OS file `ctime` (its exact meaning can
