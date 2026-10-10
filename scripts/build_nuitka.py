@@ -331,7 +331,10 @@ def build_macos(root: Path):
 
     out_app_dir = root / "dist" / "macos-app"
     reset_output_dir(out_app_dir)
-    app_cmd = nuitka_base_cmd(root, out_app_dir) + ["--macos-create-app-bundle"]
+    app_cmd = nuitka_base_cmd(root, out_app_dir) + [
+        "--macos-create-app-bundle",
+        f"--macos-app-name={APP_NAME}",
+    ]
 
     macos_icon = resolve_macos_icon(root, metadata)
     if macos_icon is not None:
