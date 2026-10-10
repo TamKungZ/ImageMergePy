@@ -258,10 +258,15 @@ def nuitka_base_cmd(root: Path, output_dir: Path) -> list[str]:
     if metadata_path.exists():
         cmd.append(f"--include-data-file={metadata_path}=app_metadata.json")
 
-    font_license = root / "build" / "fonts" / "OFL.txt"
-    if not font_license.is_file():
-        raise FileNotFoundError(f"Downloaded Kanit license not found: {font_license}")
-    cmd.append(f"--include-data-file={font_license}=Kanit-OFL.txt")
+    font_dir = root / "build" / "fonts"
+    font_files = sorted(font_dir.glob("*.ttf"))
+    font_licenses = sorted(font_dir.glob("*-OFL.txt"))
+    if len(font_files) != 6 or len(font_licenses) != 6:
+        raise FileNotFoundError(f"Downloaded Noto Sans fonts and licenses not found in {font_dir}")
+    for font_file in font_files:
+        cmd.append(f"--include-data-file={font_file}=fonts/{font_file.name}")
+    for font_license in font_licenses:
+        cmd.append(f"--include-data-file={font_license}=fonts/{font_license.name}")
 
     return cmd
 
@@ -349,6 +354,9 @@ def build_macos(root: Path):
 def clean_generated_build_files(root: Path) -> None:
     generated_module = root / "src" / "media_merge" / "_embedded_fonts.py"
     generated_module.unlink(missing_ok=True)
+    generated_fonts = root / "build" / "fonts"
+    if generated_fonts.is_dir():
+        shutil.rmtree(generated_fonts)
 
     for generated_path in (
         root / "build" / "fonts",
