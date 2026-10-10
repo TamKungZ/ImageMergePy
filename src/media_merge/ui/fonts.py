@@ -1,11 +1,11 @@
 """Application font selection (needs Qt, so it lives in the UI package)."""
 import os
 import sys
-from pathlib import Path
 
 from PySide6.QtGui import QFontDatabase
 
 from ..constants import DEFAULT_LANG
+from ..metadata import APP_DIR
 
 _SCRIPT_FONT_CANDIDATES: dict[str, tuple[str, ...]] = {
     "th": ("Noto Sans Thai", "Noto Sans"),
@@ -38,9 +38,9 @@ def _load_bundled_font(family: str) -> str | None:
     if family in _registered_families:
         return _registered_families[family]
     file_name = _FONT_FILE_NAMES.get(family)
-    if file_name is None or not sys.argv:
+    if file_name is None:
         return None
-    font_path = Path(sys.argv[0]).resolve().parent / "fonts" / file_name
+    font_path = APP_DIR / "fonts" / file_name
     if not font_path.is_file():
         return None
     font_id = QFontDatabase.addApplicationFont(str(font_path))
