@@ -135,7 +135,17 @@ Download the package for your operating system from
   24.04, or 26.04:
 
   ```bash
-  sudo add-apt-repository ppa:tamkungz/stable
+  sudo apt install -y curl gnupg
+  sudo install -d -m 0755 /etc/apt/keyrings
+
+  curl -fsSL https://packages.tamkungz.me/gpg.key \
+    | sudo gpg --dearmor --yes -o /etc/apt/keyrings/tamkungz.gpg
+
+  sudo chmod 0644 /etc/apt/keyrings/tamkungz.gpg
+
+  echo "deb [signed-by=/etc/apt/keyrings/tamkungz.gpg] https://ppa.launchpadcontent.net/tamkungz/stable/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+    | sudo tee /etc/apt/sources.list.d/tamkungz-stable.list
+
   sudo apt update
   sudo apt install imagemerge
   ```
