@@ -1,9 +1,9 @@
+import os
 import sys
 
 
 def main() -> int:
     if len(sys.argv) > 1:
-        # CLI path: must never import Qt, so it starts instantly and runs headless.
         from .cli import run_cli
 
         try:
@@ -15,6 +15,10 @@ def main() -> int:
             return 130
         except Exception as exc:
             print(f"ERROR: {exc}", file=sys.stderr, flush=True)
+            if os.environ.get("IMAGEMERGE_DEBUG"):
+                import traceback
+
+                traceback.print_exc()
             return 1
 
     from PySide6.QtWidgets import QApplication
