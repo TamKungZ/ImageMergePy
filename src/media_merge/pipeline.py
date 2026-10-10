@@ -32,8 +32,6 @@ def validate_options(options: ProcessOptions, tr=t_identity) -> None:
         source = folder.path.resolve()
         if source == output:
             raise ValueError(tr("error_output_same_as_input"))
-        # An output inside an input would be re-scanned, and in move/copy_delete mode
-        # the freshly written files would be deleted as "duplicates of themselves".
         if source in output.parents:
             raise ValueError(tr("error_output_inside_input"))
 
@@ -103,6 +101,8 @@ def process_media(
     progress: ProgressFn | None = None,
 ) -> ProcessStats:
     validate_options(options, tr)
+    dry_run = options.dry_run
+    output_existed = options.output_dir.exists()
     options.output_dir.mkdir(parents=True, exist_ok=True)
 
     stats = ProcessStats()
@@ -114,24 +114,36 @@ def process_media(
         progress=progress or (lambda done, total: None),
         stats=stats,
     )
+    use_workspace = options.use_safe_temp_workspace or dry_run
     try:
-        if options.use_safe_temp_workspace:
+        if use_workspace:
             with SafeWorkspace(options.output_dir) as workspace:
+                if dry_run:
+                    logger.write("DRY RUN: no files will be changed.")
                 logger.write(f"Safe workspace: {workspace.session_dir}")
                 ctx = JobContext(work_dir=workspace.work_dir, defer_deletes=True, **common)
                 _execute(ctx)
                 ctx.cancel.raise_if_cancelled()
-                workspace.commit()
-                _delete_pending_sources(ctx)
+                if dry_run:
+                    stats.deleted_sources += len(dict.fromkeys(ctx.pending_deletes))
+                else:
+                    workspace.commit()
+                    _delete_pending_sources(ctx)
         else:
             ctx = JobContext(work_dir=options.output_dir, **common)
             _execute(ctx)
     except OperationCancelled:
         stats.cancelled = True
-        logger.write(
-            tr("log_cancelled_safe" if options.use_safe_temp_workspace else "log_cancelled_partial")
-        )
+        logger.write(tr("log_cancelled_safe" if use_workspace else "log_cancelled_partial"))
         return stats
+    finally:
+        if dry_run and not output_existed:
+            try:
+                options.output_dir.rmdir()
+            except OSError:
+                pass
 
     _log_summary(logger, tr, stats)
+    if dry_run:
+        logger.write("DRY RUN: nothing was changed. The counts above show what would happen.")
     return stats
