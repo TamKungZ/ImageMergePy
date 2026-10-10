@@ -21,12 +21,14 @@ jobs:
     name: Submit to WinGet
     runs-on: windows-latest
     steps:
+      # Validate the tag BEFORE it is used anywhere else (including checkout).
       - name: Resolve release tag
         id: meta
         shell: powershell
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
+          $ErrorActionPreference = 'Stop'
           $tag = $env:RELEASE_TAG
           if ([string]::IsNullOrWhiteSpace($tag)) { throw "Missing release tag" }
           if ($tag -notmatch '^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') { throw "Invalid release tag: $tag" }
@@ -34,15 +36,31 @@ jobs:
           if ($version.StartsWith('v')) { $version = $version.Substring(1) }
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "icon_url=https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$tag/assets/icons/app-icon-256.png" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "release_url=https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ steps.meta.outputs.tag }}
+
+      - name: Verify files required at this tag
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($f in @('Releases.md', 'assets/icons/app-icon-256.png')) {
+            if (-not (Test-Path -LiteralPath $f)) { throw "Required file missing at tag ${{ steps.meta.outputs.tag }}: $f" }
+          }
 
       - name: Resolve installer URL from release assets
         id: asset
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = "${{ steps.meta.outputs.tag }}"
+          $tag = $env:RELEASE_TAG
           $releaseJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag"
           if ($LASTEXITCODE -ne 0) { throw "Unable to fetch GitHub Release $tag" }
           $release = $releaseJson | ConvertFrom-Json
@@ -54,10 +72,45 @@ jobs:
           }
           "url=$($asset.browser_download_url)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Extract release notes from Releases.md
+        id: notes
+        shell: python
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          import os, re
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          content = Path("Releases.md").read_text(encoding="utf-8")
+          entries = list(re.finditer(r"(?m)^Tag:\s*([^\r\n]+?)\s*$", content))
+          for index, entry in enumerate(entries):
+              if entry.group(1).strip() != tag:
+                  continue
+              end = entries[index + 1].start() if index + 1 < len(entries) else len(content)
+              section = content[entry.start():end]
+              notes_match = re.search(r"(?m)^Release notes:\s*$", section)
+              if notes_match is None:
+                  raise SystemExit(f"Missing 'Release notes:' for {tag}")
+              notes = section[notes_match.end():]
+              notes = re.sub(r"(?s)\s*---\s*$", "", notes).rstrip()
+              if not notes:
+                  raise SystemExit(f"Empty release notes for {tag}")
+              Path("release_notes.txt").write_text(notes + "\n", encoding="utf-8")
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+                  fh.write("notes_file=release_notes.txt\n")
+              print(f"Extracted release notes for {tag}")
+              break
+          else:
+              raise SystemExit(f"No entry for {tag} in Releases.md")
+
       - name: Install wingetcreate
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
           Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile "wingetcreate.exe"
+          if (-not (Test-Path .\wingetcreate.exe)) { throw "Failed to download wingetcreate.exe" }
 
       - name: Sync winget-pkgs fork
         shell: powershell
@@ -85,25 +138,46 @@ jobs:
             throw "Unable to resolve microsoft/winget-pkgs default branch"
           }
 
+          # Windows PowerShell 5.1 turns native stderr into a terminating error under
+          # $ErrorActionPreference='Stop' when redirected with 2>&1, so relax it around gh calls.
+          $ErrorActionPreference = 'Continue'
           $forkLookup = gh api "repos/$owner/winget-pkgs" 2>&1
-          if ($LASTEXITCODE -ne 0) {
-            $forkError = $forkLookup -join "`n"
+          $forkExit = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+
+          if ($forkExit -ne 0) {
+            $forkError = ($forkLookup | ForEach-Object { "$_" }) -join "`n"
             if ($forkError -notmatch '(?i)(HTTP\s+404|Not Found)') {
               throw "Unable to check winget-pkgs fork: $forkError"
             }
 
             gh api -X POST "repos/microsoft/winget-pkgs/forks" | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "Unable to create winget-pkgs fork" }
-            Start-Sleep -Seconds 5
           }
 
-          gh api -X POST "repos/$owner/winget-pkgs/merge-upstream" -f branch="$upstreamDefaultBranch" | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "Unable to sync winget-pkgs fork with upstream" }
+          # Fork creation is asynchronous, so retry the sync for a while.
+          $synced = $false
+          $syncError = ''
+          for ($i = 1; $i -le 12; $i++) {
+            $ErrorActionPreference = 'Continue'
+            $syncOut = gh api -X POST "repos/$owner/winget-pkgs/merge-upstream" -f branch="$upstreamDefaultBranch" 2>&1
+            $syncExit = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($syncExit -eq 0) { $synced = $true; break }
+            $syncError = ($syncOut | ForEach-Object { "$_" }) -join "`n"
+            Write-Host "Fork sync attempt $i failed; retrying in 10s"
+            Start-Sleep -Seconds 10
+          }
+          if (-not $synced) { throw "Unable to sync winget-pkgs fork with upstream: $syncError" }
+          Write-Host "Fork $owner/winget-pkgs is in sync with upstream/$upstreamDefaultBranch"
 
-      - name: Submit WinGet manifest update
+      - name: Generate WinGet manifest locally
+        id: generate
         shell: powershell
         env:
           WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+          PACKAGE_VERSION: ${{ steps.meta.outputs.version }}
+          INSTALLER_URL: ${{ steps.asset.outputs.url }}
         run: |
           $ErrorActionPreference = 'Stop'
 
@@ -112,10 +186,134 @@ jobs:
           }
 
           $id = $env:WINGET_PACKAGE_IDENTIFIER
-          $version = "${{ steps.meta.outputs.version }}"
-          $url = "${{ steps.asset.outputs.url }}"
+          $version = $env:PACKAGE_VERSION
+          $url = $env:INSTALLER_URL
 
-          .\wingetcreate.exe update $id --urls $url --version $version --submit --token $env:WINGET_GITHUB_TOKEN
+          $outputDir = Join-Path $PWD 'winget-manifest'
+          if (Test-Path $outputDir) { Remove-Item -Recurse -Force $outputDir }
+          New-Item -ItemType Directory -Path $outputDir | Out-Null
+
+          # wingetcreate reads its token from this variable (not GH_TOKEN).
+          $env:WINGET_CREATE_GITHUB_TOKEN = $env:WINGET_GITHUB_TOKEN
+          .\wingetcreate.exe update $id --urls $url --version $version --out $outputDir
           if ($LASTEXITCODE -ne 0) {
             throw "wingetcreate update failed. For a first-time package submission, use wingetcreate new with the release MSI URL and submit its manifest PR manually."
+          }
+
+          $yamlFiles = @(Get-ChildItem -Path $outputDir -Recurse -Filter "*.yaml")
+          if ($yamlFiles.Count -eq 0) {
+            throw "wingetcreate did not produce any yaml files in $outputDir"
+          }
+          $localeFile = $yamlFiles | Where-Object { $_.Name -like '*.locale.en-US.yaml' } | Select-Object -First 1
+          if (-not $localeFile) {
+            throw "Could not find *.locale.en-US.yaml in $outputDir"
+          }
+          $versionDir = $localeFile.Directory.FullName
+
+          "version_dir=$versionDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "locale_file=$($localeFile.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Inject Icons and ReleaseNotes into manifest
+        shell: python
+        env:
+          LOCALE_FILE: ${{ steps.generate.outputs.locale_file }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
+          ICON_URL: ${{ steps.meta.outputs.icon_url }}
+          RELEASE_URL: ${{ steps.meta.outputs.release_url }}
+        run: |
+          import os, re
+          from pathlib import Path
+
+          locale_file = Path(os.environ["LOCALE_FILE"])
+          notes_file = Path(os.environ["NOTES_FILE"])
+          icon_url = os.environ["ICON_URL"]
+          release_url = os.environ["RELEASE_URL"]
+
+          if not locale_file.is_file():
+              raise SystemExit(f"Missing locale manifest: {locale_file}")
+          if not notes_file.is_file():
+              raise SystemExit(f"Missing release notes file: {notes_file}")
+
+          release_notes = notes_file.read_text(encoding="utf-8")
+          release_notes = release_notes.replace("\r\n", "\n").rstrip("\n") + "\n"
+
+          # YAML block scalar: indent every non-empty line by 2 spaces.
+          indented_notes = "\n".join("  " + line if line.strip() else "" for line in release_notes.splitlines())
+
+          original = locale_file.read_text(encoding="utf-8")
+          lines = original.splitlines()
+
+          # Remove any existing ReleaseNotes / ReleaseNotesUrl / Icons entries, including their
+          # continuation lines: indented lines, blank lines, and unindented "- " list items.
+          filtered = []
+          skip_block = False
+          for line in lines:
+              if re.match(r"^(ReleaseNotes|ReleaseNotesUrl|Icons):", line):
+                  skip_block = True
+                  continue
+              if skip_block:
+                  if line.strip() == "" or line[:1] in (" ", "\t") or line.startswith("-"):
+                      continue
+                  skip_block = False
+              filtered.append(line)
+
+          insert_at = next((i for i, l in enumerate(filtered) if l.startswith("ManifestType:")), None)
+          if insert_at is None:
+              raise SystemExit("Could not find 'ManifestType:' line in locale file")
+
+          new_block = [
+              "ReleaseNotes: |",
+              indented_notes,
+              f"ReleaseNotesUrl: {release_url}",
+              "Icons:",
+              f"- IconUrl: {icon_url}",
+              "  IconFileType: png",
+              "  IconResolution: 256x256",
+              "  IconTheme: default",
+          ]
+
+          result = filtered[:insert_at] + new_block + filtered[insert_at:]
+          locale_file.write_text("\n".join(result) + "\n", encoding="utf-8")
+
+          # Sanity check: each injected key must appear exactly once.
+          final = locale_file.read_text(encoding="utf-8")
+          for key in ("ReleaseNotes", "ReleaseNotesUrl", "Icons"):
+              count = len(re.findall(rf"(?m)^{key}:", final))
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one '{key}:' in manifest, found {count}")
+          print(f"Patched {locale_file}")
+
+      - name: Validate patched manifest
+        shell: powershell
+        env:
+          VERSION_DIR: ${{ steps.generate.outputs.version_dir }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            throw "winget CLI is not available on this runner"
+          }
+
+          winget validate --manifest $env:VERSION_DIR
+          if ($LASTEXITCODE -ne 0) { throw "Patched manifest failed validation" }
+          Write-Host "Manifest validation succeeded"
+
+      - name: Submit WinGet manifest
+        shell: powershell
+        env:
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+          VERSION_DIR: ${{ steps.generate.outputs.version_dir }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:WINGET_GITHUB_TOKEN)) {
+            throw "Missing secret: WINGET_GITHUB_TOKEN"
+          }
+
+          # Token is passed via environment rather than the command line.
+          $env:WINGET_CREATE_GITHUB_TOKEN = $env:WINGET_GITHUB_TOKEN
+
+          .\wingetcreate.exe submit $env:VERSION_DIR
+          if ($LASTEXITCODE -ne 0) {
+            throw "wingetcreate submit failed"
           }
