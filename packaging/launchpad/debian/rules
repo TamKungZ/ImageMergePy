@@ -7,8 +7,9 @@ override_dh_auto_build:
 
 override_dh_auto_test:
 
-# The standalone runtime bundles its private libraries; list system dependencies in control.
 override_dh_shlibdeps:
+
+override_dh_makeshlibs:
 
 override_dh_auto_install:
 	install -d debian/imagemerge/opt/ImageMerge debian/imagemerge/usr/bin
