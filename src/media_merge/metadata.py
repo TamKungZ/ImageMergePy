@@ -1,10 +1,20 @@
 """Application metadata (app_metadata.json) and project paths."""
 import json
+import sys
 from pathlib import Path
 
 from .constants import APP_FALLBACK_TITLE
 
-APP_DIR = Path(__file__).resolve().parents[2]
+
+
+def _resolve_app_dir() -> Path:
+    here = Path(__file__).resolve()
+    if "__compiled__" in globals() or getattr(sys, "frozen", False):
+        return here.parents[__name__.count(".")]
+    return here.parents[2]
+
+
+APP_DIR = _resolve_app_dir()
 APP_METADATA_PATH = APP_DIR / "app_metadata.json"
 
 
