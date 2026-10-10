@@ -114,7 +114,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y debhelper devscripts dput
 
-      - name: Build signed source package
+      - name: Build and upload signed source package
         shell: bash
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_LINUX }}
@@ -162,10 +162,8 @@ jobs:
             --signing-command "$signing_command" \
             --maintainer-email "$MAINTAINER_EMAIL"
 
-      - name: Upload source package to Launchpad
-        shell: bash
-        run: |
-          set -euo pipefail
+          # Upload the signed source package to Launchpad.
+          # This must happen in the same step so GNUPGHOME is still available for dput's signature verification.
           changes_file="$(find "$RUNNER_TEMP/launchpad-source" -maxdepth 1 -name '*_source.changes' -print -quit)"
           if [ -z "$changes_file" ]; then
             echo "Signed Launchpad source .changes file was not produced."
