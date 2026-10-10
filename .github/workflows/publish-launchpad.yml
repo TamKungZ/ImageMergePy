@@ -73,9 +73,9 @@ jobs:
       - name: Validate Launchpad signing key
         shell: bash
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_LINUX }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE_LINUX }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID_LINUX }}
         run: |
           set -euo pipefail
           for name in GPG_PRIVATE_KEY GPG_PASSPHRASE GPG_KEY_ID; do
@@ -117,9 +117,9 @@ jobs:
       - name: Build signed source package
         shell: bash
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_LINUX }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE_LINUX }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID_LINUX }}
           MAINTAINER_EMAIL: ${{ inputs.maintainer_email }}
         run: |
           set -euo pipefail

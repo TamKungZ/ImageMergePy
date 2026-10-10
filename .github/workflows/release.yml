@@ -929,45 +929,57 @@ jobs:
           cd release_files
           sha256sum ImageMerge-* > SHA256SUMS
 
-      - name: Import GPG key
+      - name: Import GPG keys (Linux + Windows)
         shell: bash
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PRIVATE_LINUX: ${{ secrets.GPG_PRIVATE_LINUX }}
+          GPG_PRIVATE_WIN: ${{ secrets.GPG_PRIVATE_WIN }}
         run: |
-          if [ -z "$GPG_PRIVATE_KEY" ]; then
-            echo "Missing secret: GPG_PRIVATE_KEY"
-            exit 1
-          fi
-          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          for name in GPG_PRIVATE_LINUX GPG_PRIVATE_WIN; do
+            if [ -z "${!name}" ]; then
+              echo "Missing secret: $name"
+              exit 1
+            fi
+          done
+          printf '%s' "$GPG_PRIVATE_LINUX" | gpg --batch --import
+          printf '%s' "$GPG_PRIVATE_WIN" | gpg --batch --import
 
-      - name: Sign SHA256SUMS with GPG
+      - name: Sign SHA256SUMS with both GPG keys
         shell: bash
         env:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_PASSPHRASE_LINUX: ${{ secrets.GPG_PASSPHRASE_LINUX }}
+          GPG_PASSPHRASE_WIN: ${{ secrets.GPG_PASSPHRASE_WIN }}
+          GPG_KEY_ID_LINUX: ${{ secrets.GPG_KEY_ID_LINUX }}
+          GPG_KEY_ID_WIN: ${{ secrets.GPG_KEY_ID_WIN }}
         run: |
-          if [ -z "$GPG_PASSPHRASE" ] || [ -z "$GPG_KEY_ID" ]; then
-            echo "Missing secret: GPG_PASSPHRASE or GPG_KEY_ID"
-            exit 1
-          fi
+          for name in GPG_PASSPHRASE_LINUX GPG_PASSPHRASE_WIN GPG_KEY_ID_LINUX GPG_KEY_ID_WIN; do
+            if [ -z "${!name}" ]; then
+              echo "Missing secret: $name"
+              exit 1
+            fi
+          done
           cd release_files
           gpg --batch --yes --pinentry-mode loopback \
-            --passphrase "$GPG_PASSPHRASE" \
-            --local-user "$GPG_KEY_ID" \
+            --passphrase "$GPG_PASSPHRASE_LINUX" \
+            --local-user "$GPG_KEY_ID_LINUX" \
             --armor --detach-sign \
             --output SHA256SUMS.asc \
             SHA256SUMS
+          gpg --batch --yes --pinentry-mode loopback \
+            --passphrase "$GPG_PASSPHRASE_WIN" \
+            --local-user "$GPG_KEY_ID_WIN" \
+            --armor --detach-sign \
+            --output SHA256SUMS-win.asc \
+            SHA256SUMS
 
-      - name: Export public GPG key
+      - name: Export public GPG keys
         shell: bash
         env:
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_KEY_ID_LINUX: ${{ secrets.GPG_KEY_ID_LINUX }}
+          GPG_KEY_ID_WIN: ${{ secrets.GPG_KEY_ID_WIN }}
         run: |
-          if [ -z "$GPG_KEY_ID" ]; then
-            echo "Missing secret: GPG_KEY_ID"
-            exit 1
-          fi
-          gpg --batch --yes --armor --export "$GPG_KEY_ID" > release_files/GPG-KEY.asc
+          gpg --batch --yes --armor --export "$GPG_KEY_ID_LINUX" > release_files/GPG-KEY.asc
+          gpg --batch --yes --armor --export "$GPG_KEY_ID_WIN" > release_files/GPG-KEY-win.asc
 
       - name: Upload assets to draft GitHub Release
         uses: softprops/action-gh-release@v2
