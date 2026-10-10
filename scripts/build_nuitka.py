@@ -263,10 +263,7 @@ def nuitka_base_cmd(root: Path, output_dir: Path) -> list[str]:
     font_licenses = sorted(font_dir.glob("*-OFL.txt"))
     if len(font_files) != 6 or len(font_licenses) != 6:
         raise FileNotFoundError(f"Downloaded Noto Sans fonts and licenses not found in {font_dir}")
-    for font_file in font_files:
-        cmd.append(f"--include-data-file={font_file}=fonts/{font_file.name}")
-    for font_license in font_licenses:
-        cmd.append(f"--include-data-file={font_license}=fonts/{font_license.name}")
+    cmd.append(f"--include-data-dir={font_dir}=fonts")
 
     return cmd
 
