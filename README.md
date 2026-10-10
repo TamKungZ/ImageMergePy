@@ -13,6 +13,34 @@ and renames the results into an ordered sequence.
   only when processing completes.
 - Sort media into predictable groups and rename them into one sequence.
 
+## Mode Preview
+
+<table style="width:100%; table-layout:fixed; text-align:center; margin:auto;">
+  <thead>
+    <tr>
+      <th style="text-align:center;">Merge</th>
+      <th style="text-align:center;">Library</th>
+      <th style="text-align:center;">Tidy</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <img src="screenshots/merge.png"
+             style="width:100%; height:min(60vh,500px); object-fit:contain; display:block; margin:auto;">
+      </td>
+      <td>
+        <img src="screenshots/library.png"
+             style="width:100%; height:min(60vh,500px); object-fit:contain; display:block; margin:auto;">
+      </td>
+      <td>
+        <img src="screenshots/tidy.png"
+             style="width:100%; height:min(60vh,500px); object-fit:contain; display:block; margin:auto;">
+      </td>
+    </tr>
+  </tbody>
+</table>
+
 ## Sort priority
 
 For **Merge** (copy/move from input folders), compare top to bottom. Each
