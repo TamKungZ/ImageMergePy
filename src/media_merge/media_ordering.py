@@ -206,9 +206,14 @@ def organize_output(
 def collect_source_media(folders: list[SourceFolder]) -> list[tuple[Path, float, str]]:
     image_files = []
     video_files = []
+    seen: set[str] = set()
 
     for folder in folders:
         for file_path in iter_media_files(folder.path):
+            identity = os.path.normcase(os.path.abspath(file_path))
+            if identity in seen:
+                continue
+            seen.add(identity)
             try:
                 ctime = os.path.getctime(file_path)
             except OSError:
