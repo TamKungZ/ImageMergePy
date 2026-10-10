@@ -31,7 +31,6 @@ src/media_merge/_embedded_fonts.py
 # Rust
 **/*.rs.bk
 *.pdb
-# Cargo.lock: ถ้าเป็น library ให้ ignore, ถ้าเป็น application ให้ commit ไว้
 # Cargo.lock
 
 # C# / .NET
