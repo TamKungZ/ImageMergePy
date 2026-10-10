@@ -75,10 +75,9 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_LINUX }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE_LINUX }}
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID_LINUX }}
         run: |
           set -euo pipefail
-          for name in GPG_PRIVATE_KEY GPG_PASSPHRASE GPG_KEY_ID; do
+          for name in GPG_PRIVATE_KEY GPG_PASSPHRASE; do
             if [ -z "${!name}" ]; then
               echo "Missing secret: $name"
               exit 1
@@ -92,8 +91,8 @@ jobs:
             echo "GPG_PRIVATE_KEY could not be imported."
             exit 1
           fi
-          if ! gpg --batch --with-colons --list-secret-keys "$GPG_KEY_ID" | grep -q '^sec:'; then
-            echo "GPG_KEY_ID does not identify an imported private key."
+          if ! gpg --batch --with-colons --list-secret-keys | grep -q '^sec:'; then
+            echo "GPG_PRIVATE_KEY does not contain an imported private key."
             exit 1
           fi
 
@@ -119,7 +118,6 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_LINUX }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE_LINUX }}
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID_LINUX }}
           MAINTAINER_EMAIL: ${{ inputs.maintainer_email }}
         run: |
           set -euo pipefail
@@ -131,6 +129,11 @@ jobs:
           install -d -m 700 "$GNUPGHOME"
           trap 'rm -rf "$GNUPGHOME"' EXIT
           printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import >/dev/null 2>&1
+          GPG_KEY_ID="$(gpg --batch --with-colons --list-secret-keys 2>/dev/null | awk -F: '$1=="sec"{f=1;next} f && $1=="fpr"{print $10; exit}')"
+          if [ -z "$GPG_KEY_ID" ]; then
+            echo "Could not determine the key ID from GPG_PRIVATE_LINUX."
+            exit 1
+          fi
 
           signing_command="$RUNNER_TEMP/gpg-launchpad-sign"
           cat > "$signing_command" <<'EOF'

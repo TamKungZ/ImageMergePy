@@ -941,6 +941,20 @@ jobs:
               exit 1
             fi
           done
+          # Read each key's fingerprint before importing so the two keys can be told apart.
+          key_fpr() {
+            printf '%s' "$1" | gpg --batch --with-colons --import-options show-only --import 2>/dev/null |
+              awk -F: '$1=="sec"{f=1;next} f && $1=="fpr"{print $10; exit}'
+          }
+          GPG_KEY_ID_LINUX="$(key_fpr "$GPG_PRIVATE_LINUX")"
+          GPG_KEY_ID_WIN="$(key_fpr "$GPG_PRIVATE_WIN")"
+          if [ -z "$GPG_KEY_ID_LINUX" ] || [ -z "$GPG_KEY_ID_WIN" ]; then
+            echo "Could not determine key ID from GPG_PRIVATE_LINUX / GPG_PRIVATE_WIN."
+            exit 1
+          fi
+          # Make the derived IDs available to later steps.
+          echo "GPG_KEY_ID_LINUX=$GPG_KEY_ID_LINUX" >> "$GITHUB_ENV"
+          echo "GPG_KEY_ID_WIN=$GPG_KEY_ID_WIN" >> "$GITHUB_ENV"
           printf '%s' "$GPG_PRIVATE_LINUX" | gpg --batch --import
           printf '%s' "$GPG_PRIVATE_WIN" | gpg --batch --import
 
@@ -949,8 +963,6 @@ jobs:
         env:
           GPG_PASSPHRASE_LINUX: ${{ secrets.GPG_PASSPHRASE_LINUX }}
           GPG_PASSPHRASE_WIN: ${{ secrets.GPG_PASSPHRASE_WIN }}
-          GPG_KEY_ID_LINUX: ${{ secrets.GPG_KEY_ID_LINUX }}
-          GPG_KEY_ID_WIN: ${{ secrets.GPG_KEY_ID_WIN }}
         run: |
           for name in GPG_PASSPHRASE_LINUX GPG_PASSPHRASE_WIN GPG_KEY_ID_LINUX GPG_KEY_ID_WIN; do
             if [ -z "${!name}" ]; then
@@ -974,9 +986,6 @@ jobs:
 
       - name: Export public GPG keys
         shell: bash
-        env:
-          GPG_KEY_ID_LINUX: ${{ secrets.GPG_KEY_ID_LINUX }}
-          GPG_KEY_ID_WIN: ${{ secrets.GPG_KEY_ID_WIN }}
         run: |
           gpg --batch --yes --armor --export "$GPG_KEY_ID_LINUX" > release_files/GPG-KEY.asc
           gpg --batch --yes --armor --export "$GPG_KEY_ID_WIN" > release_files/GPG-KEY-win.asc
