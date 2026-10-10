@@ -29,7 +29,6 @@ nuitka-crash-report.xml
 src/media_merge/_embedded_fonts.py
 
 # Rust
-# (target/ ถูก ignore ไว้ด้านบนแล้ว)
 **/*.rs.bk
 *.pdb
 # Cargo.lock: ถ้าเป็น library ให้ ignore, ถ้าเป็น application ให้ commit ไว้
