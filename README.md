@@ -15,44 +15,35 @@ and renames the results into an ordered sequence.
 
 ## Sort priority
 
-For **Merge** (copy/move from input folders), follow the tree from top to
-bottom. A lower branch is considered only after all higher branches tie:
+For **Merge** (copy/move from input folders), compare top to bottom. Each
+extension is sorted separately; within an extension, filename classes are
+ordered as shown:
 
 ```text
-Priority 1: Media type
-├─ Images
-└─ Videos                         (all images come first)
-
-Priority 2: Extension             (compare only within the same media type)
-├─ Images: .png → .jpg → .jpeg → .webp → .bmp → .gif → .tiff
-└─ Videos: .mp4 → .mov → .mkv → .avi → .webm → .m4v → .wmv → .flv → .ts → .mts
-
-Priority 3: Filename group        (compare only within the same extension)
-├─ IMG + number (IMG_2, IMG_10; this group is only for IMG-style names)
-├─ UUID/hash-style name
-├─ Other names with a leading number (2.png, 10.png, 2-holiday.png)
-└─ Other names without a recognized leading number (holiday.png, vacation.png)
-
-Priority 4: Order within group
-├─ IMG + number: number → file timestamp → name
-├─ UUID/hash:    file timestamp → name
-├─ Leading number: number → duplicate suffix (1) → file timestamp → name
-└─ Other names:    file timestamp → name
+1. Media type: Images → Videos
+2. Extension, within each media type:
+   ├─ Images: .png → .jpg → .jpeg → .webp → .bmp → .gif → .tiff
+   └─ Videos: .mp4 → .mov → .mkv → .avi → .webm → .m4v → .wmv → .flv → .ts → .mts
+3. Filename class, within each extension:
+   ├─ IMG + number → IMG number → timestamp → filename
+   ├─ UUID/hash    → timestamp → filename
+   └─ Other names → parsed number → duplicate suffix → timestamp → filename
 ```
 
-For example, `IMG_2.jpg` and `IMG_10.jpg` are in the first filename group;
-`2.jpg` and `10.jpg` are in **Other names with a leading number** and sort
-numerically (`2.jpg` before `10.jpg`). Word-based names, names in any language,
-and other names that do not start with a recognized number are in the final
-**Other names** group; they sort by file timestamp, then name. The filename
-groups are checked in the order shown above.
+`IMG + number` means a filename matching the app's `IMG` pattern, e.g.
+`IMG_2.jpg`; plain `2.jpg` is an **Other name**. For other names, the parser
+can extract a number from names such as `2.jpg`, `2-holiday.jpg`, and
+`holiday-2.jpg`; these sort numerically (`2` before `10`). A suffix such as
+`(1)` after the number is the next tie-breaker. Names with no parsed number
+(e.g. `holiday.jpg`, words in any language) sort after numbered names, then by
+timestamp and filename. UUID/hash names must match the app's recognized UUID
+or hexadecimal-hash patterns.
 
-Numbers are compared numerically (`2` before `10`); timestamps are oldest
-first. For Merge, the timestamp is the OS file `ctime` (its exact meaning can
-vary by OS). So the effective priority is **media type → extension → filename
-group → number (where applicable) → date (where applicable) → name**. Date is
-not checked before file type or extension. Input-folder order and prefix do
-not change sorting; prefix is only added to the output name.
+Numbers sort ascending; timestamps sort oldest first. Merge uses the OS
+creation/change timestamp (`ctime`; its meaning varies by OS). Filename class
+comes before date, so an older UUID/hash file still follows an `IMG` file of
+the same extension. Input-folder order and input prefix do not affect sorting;
+the prefix is only added to the output name.
 
 After sorting, output numbering runs continuously from `0001` across extensions
 and input folders.
@@ -81,15 +72,17 @@ more-0005.jpg   # more/3.jpg
 more-0006.mp4   # more/2.mp4
 ```
 
-Organizer modes use their own within-extension rule:
+Organizers use different rules for files already in the target folder:
 
 ```text
-main_folder:   media type → extension → existing sequence number → duplicate suffix → name
-inside_folder: media type → extension → file modification time → sequence number → name
+main_folder:   media type → extension → sequence number → duplicate suffix → prefix → filename
+inside_folder: media type → extension → modification time → sequence number → duplicate suffix → filename
 ```
 
-For both modes, images come before videos and extensions follow the same fixed
-order listed above. Dates are oldest first.
+Images still come before videos and extensions use the same order above. In
+`main_folder`, existing output files are ordered by their sequence numbers;
+newly imported files are first ordered by the Merge rules. In
+`inside_folder`, modification time is oldest first.
 
 ## Download and install
 
