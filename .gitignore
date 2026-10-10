@@ -28,6 +28,45 @@ pip-wheel-metadata/
 nuitka-crash-report.xml
 src/media_merge/_embedded_fonts.py
 
+# Rust
+# (target/ ถูก ignore ไว้ด้านบนแล้ว)
+**/*.rs.bk
+*.pdb
+# Cargo.lock: ถ้าเป็น library ให้ ignore, ถ้าเป็น application ให้ commit ไว้
+# Cargo.lock
+
+# C# / .NET
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vsidx
+.vs/
+*.rsuser
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+artifacts/
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+publish/
+*.publish.xml
+*.pubxml
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+msix-staging/
+
 # IDE / OS
 .vscode/
 .idea/
