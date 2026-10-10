@@ -92,7 +92,7 @@ jobs:
               notes_match = re.search(r"(?m)^Release notes:\s*$", section)
               if notes_match is None:
                   raise SystemExit(f"Missing 'Release notes:' for {tag}")
-              notes = section[notes_match.end():]
+              notes = section[notes_match.end():].lstrip("\r\n")
               notes = re.sub(r"(?s)\s*---\s*$", "", notes).rstrip()
               if not notes:
                   raise SystemExit(f"Empty release notes for {tag}")
