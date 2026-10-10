@@ -1,37 +1,38 @@
-"""The two left-hand pages: Merge, and Organizer (main-folder / inside-folder)."""
+"""The two workspace pages: Merge folders, and the folder organizer (Add to library / Tidy a folder)."""
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from ..constants import MODE_COPY_DELETE, MODE_COPY_KEEP, MODE_MOVE
 from .source_list import SourceListPanel
-from .theme import C_BG
-from .widgets import (
-    PRIMARY_BTN_STYLE,
-    ModeCard,
-    _section_label,
-    make_button,
-    make_card,
-    make_output_row,
-)
+from .widgets import ChoiceCard, OptionRow, StepCard, make_button, make_hint, make_path_row, styled
+
+_CONTENT_MAX_WIDTH = 920
 
 
-def _make_page_body() -> tuple[QWidget, QVBoxLayout]:
-    body = QWidget()
-    body.setStyleSheet(f"background:{C_BG};")
-    lay = QVBoxLayout(body)
-    lay.setContentsMargins(22, 20, 22, 22)
-    lay.setSpacing(14)
-    return body, lay
+def _make_page() -> tuple[QScrollArea, QVBoxLayout]:
+    """Scrollable page with a centred, width-limited content column."""
+    body = styled(QWidget(), "pageBody")
+    outer = QHBoxLayout(body)
+    outer.setContentsMargins(32, 28, 32, 28)
+    outer.setSpacing(0)
 
+    content = QWidget()
+    content.setMaximumWidth(_CONTENT_MAX_WIDTH)
+    lay = QVBoxLayout(content)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(16)
 
-def _wrap_in_scroll(body: QWidget) -> QScrollArea:
+    outer.addStretch(1)
+    outer.addWidget(content, 100)
+    outer.addStretch(1)
+
     scroll = QScrollArea()
+    scroll.setObjectName("pageScroll")
     scroll.setWidgetResizable(True)
     scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
     scroll.setFrameShape(QFrame.NoFrame)
-    scroll.setStyleSheet(f"background:{C_BG};")
     scroll.setWidget(body)
-    return scroll
+    return scroll, lay
 
 
 def _page_header(lay: QVBoxLayout) -> tuple[QLabel, QLabel]:
@@ -39,159 +40,107 @@ def _page_header(lay: QVBoxLayout) -> tuple[QLabel, QLabel]:
     title.setObjectName("pageTitle")
     lay.addWidget(title)
     desc = QLabel()
-    desc.setObjectName("pageDescription")
+    desc.setObjectName("pageDesc")
     desc.setWordWrap(True)
     lay.addWidget(desc)
+    lay.addSpacing(4)
     return title, desc
 
 
-def _note_label() -> QLabel:
-    label = QLabel()
-    label.setObjectName("noteLabel")
-    label.setWordWrap(True)
-    return label
-
-
 class PagesMixin:
-    def _make_info_footer(self, lay: QVBoxLayout) -> QPushButton:
-        footer = QHBoxLayout()
-        footer.setContentsMargins(0, 0, 0, 0)
-        footer.setSpacing(8)
-        btn = QPushButton("i")
-        btn.setObjectName("infoBtn")
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.clicked.connect(self.show_about_popup)
-        footer.addWidget(btn, 0, Qt.AlignLeft | Qt.AlignBottom)
-        footer.addStretch()
-        lay.addLayout(footer)
-        return btn
-
     # ------------------------------------------------------------------ merge
     def _build_merge_page(self) -> QScrollArea:
-        body, lay = _make_page_body()
+        scroll, lay = _make_page()
         self.merge_page_title, self.merge_page_desc = _page_header(lay)
 
-        # 1 · sources
+        # 1 · source folders
         self.merge_sources = SourceListPanel(with_prefix=True)
         self.merge_sources.selection_changed.connect(self._on_merge_selection_changed)
         self.merge_sources.changed.connect(self._on_sources_changed)
+        self.merge_sources.paths_dropped.connect(lambda paths: self._add_dropped(self.merge_sources, paths))
+        self.merge_sources.activated.connect(lambda _path: self.edit_selected_prefix())
 
-        card, card_lay = make_card()
-        header = QHBoxLayout()
-        self.source_section_label = _section_label("")
-        header.addWidget(self.source_section_label)
-        header.addStretch()
-        self.add_folder_btn = make_button(
-            "primaryBtn", lambda: self._add_source_folder(self.merge_sources), style=PRIMARY_BTN_STYLE
-        )
-        self.edit_prefix_btn = make_button("ghostBtn", self.edit_selected_prefix, enabled=False)
-        self.remove_btn = make_button("dangerGhostBtn", self.merge_sources.remove_selected, enabled=False)
-        self.clear_btn = make_button("dangerGhostBtn", self.merge_sources.clear)
+        self.merge_step_sources = StepCard(1)
+        self.add_folder_btn = make_button("primaryBtn", lambda: self._add_source_folder(self.merge_sources))
+        self.edit_prefix_btn = make_button("secondaryBtn", self.edit_selected_prefix, enabled=False)
+        self.remove_btn = make_button("dangerQuietBtn", self.merge_sources.remove_selected, enabled=False)
+        self.clear_btn = make_button("dangerQuietBtn", self.merge_sources.clear)
         for btn in (self.add_folder_btn, self.edit_prefix_btn, self.remove_btn, self.clear_btn):
-            header.addWidget(btn)
-        card_lay.addLayout(header)
-        card_lay.addWidget(self.merge_sources)
-        lay.addWidget(card)
+            self.merge_step_sources.add_action(btn)
+        self.merge_step_sources.body.addWidget(self.merge_sources)
+        lay.addWidget(self.merge_step_sources)
 
-        # 2 · output
-        card, card_lay = make_card(spacing=10)
-        self.output_section_label = _section_label("")
-        card_lay.addWidget(self.output_section_label)
-        row, self.output_input, self.output_btn = make_output_row(self.choose_output_folder)
-        card_lay.addLayout(row)
-        lay.addWidget(card)
+        # 2 · output folder
+        self.merge_step_output = StepCard(2)
+        row, self.output_input, self.output_btn = make_path_row(self.choose_output_folder)
+        self.merge_step_output.body.addLayout(row)
+        lay.addWidget(self.merge_step_output)
 
-        # 3 · mode
-        card, card_lay = make_card()
-        self.mode_section_label = _section_label("")
-        card_lay.addWidget(self.mode_section_label)
-        grid = QHBoxLayout()
-        grid.setSpacing(12)
-        self.mode_cards: dict[str, ModeCard] = {}
-        for key in (MODE_COPY_KEEP, MODE_COPY_DELETE, MODE_MOVE):
-            mode_card = ModeCard(key, "", "")
-            mode_card.clicked.connect(self._on_mode_card_clicked)
-            self.mode_cards[key] = mode_card
-            grid.addWidget(mode_card)
+        # 3 · what happens to the originals
+        self.merge_step_mode = StepCard(3)
+        cards = QHBoxLayout()
+        cards.setSpacing(12)
+        self.mode_cards: dict[str, ChoiceCard] = {}
+        for key, danger in ((MODE_COPY_KEEP, False), (MODE_COPY_DELETE, True), (MODE_MOVE, False)):
+            card = ChoiceCard(key, danger=danger)
+            card.clicked.connect(self._on_mode_card_clicked)
+            self.mode_cards[key] = card
+            cards.addWidget(card, 1)
         self.mode_cards[MODE_COPY_KEEP].set_selected(True)
-        card_lay.addLayout(grid)
-        lay.addWidget(card)
+        self.merge_step_mode.body.addLayout(cards)
+        lay.addWidget(self.merge_step_mode)
 
         # 4 · options
-        card, card_lay = make_card(spacing=10)
-        self.opt_section_label = _section_label("")
-        card_lay.addWidget(self.opt_section_label)
-        self.clear_output_checkbox = QCheckBox()
-        self.clear_output_checkbox.setChecked(True)
-        self.allow_duplicates_checkbox = QCheckBox()
-        self.safe_temp_checkbox = QCheckBox()
-        self.safe_temp_checkbox.setChecked(True)
-        for box in (self.clear_output_checkbox, self.allow_duplicates_checkbox, self.safe_temp_checkbox):
-            card_lay.addWidget(box)
-        self.mode_note_label = _note_label()
-        card_lay.addWidget(self.mode_note_label)
-        lay.addWidget(card)
+        self.merge_step_options = StepCard(4)
+        self.clear_output_opt = OptionRow(checked=False)
+        self.allow_duplicates_opt = OptionRow()
+        self.safe_temp_opt = OptionRow(checked=True)
+        for opt in (self.clear_output_opt, self.allow_duplicates_opt, self.safe_temp_opt):
+            self.merge_step_options.body.addWidget(opt)
+        self.mode_note_label = make_hint()
+        self.merge_step_options.body.addWidget(self.mode_note_label)
+        lay.addWidget(self.merge_step_options)
 
-        lay.addStretch()
-        self.info_btn = self._make_info_footer(lay)
-        return _wrap_in_scroll(body)
+        lay.addStretch(1)
+        return scroll
 
     # -------------------------------------------------------------- organizer
     def _build_organizer_page(self) -> QScrollArea:
-        body, lay = _make_page_body()
+        scroll, lay = _make_page()
         self.main_page_title, self.main_page_desc = _page_header(lay)
 
-        # target folder + options
-        card, card_lay = make_card(spacing=10)
-        self.main_output_section_label = _section_label("")
-        card_lay.addWidget(self.main_output_section_label)
-        row, self.main_output_input, self.main_output_btn = make_output_row(self.choose_output_folder)
-        card_lay.addLayout(row)
+        # 1 · target folder
+        self.org_step_target = StepCard(1)
+        row, self.main_output_input, self.main_output_btn = make_path_row(self.choose_output_folder)
+        self.org_step_target.body.addLayout(row)
+        lay.addWidget(self.org_step_target)
 
-        self.main_clear_output_checkbox = QCheckBox()
-        self.main_clear_output_checkbox.setChecked(True)
-        self.main_remove_duplicates_checkbox = QCheckBox()
-        self.main_allow_duplicates_checkbox = QCheckBox()
-        self.main_allow_duplicates_checkbox.stateChanged.connect(self._sync_duplicate_option_state)
-        self.main_safe_temp_checkbox = QCheckBox()
-        self.main_safe_temp_checkbox.setChecked(True)
-        for box in (
-            self.main_clear_output_checkbox,
-            self.main_remove_duplicates_checkbox,
-            self.main_allow_duplicates_checkbox,
-            self.main_safe_temp_checkbox,
-        ):
-            card_lay.addWidget(box)
-
-        self.main_sources_hint_label = _note_label()
-        card_lay.addWidget(self.main_sources_hint_label)
-        self.main_page_note_label = _note_label()
-        card_lay.addWidget(self.main_page_note_label)
-        lay.addWidget(card)
-
-        # import folders (hidden for the inside-folder workflow)
+        # 2 · folders to import (library workflow only)
         self.main_sources = SourceListPanel(with_prefix=False)
         self.main_sources.selection_changed.connect(self._on_main_selection_changed)
         self.main_sources.changed.connect(self._on_sources_changed)
+        self.main_sources.paths_dropped.connect(lambda paths: self._add_dropped(self.main_sources, paths))
 
-        self.main_import_card, card_lay = make_card(spacing=10)
-        self.main_import_section_label = _section_label("")
-        card_lay.addWidget(self.main_import_section_label)
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(8)
-        header.addStretch()
-        self.main_add_folder_btn = make_button(
-            "primaryBtn", lambda: self._add_source_folder(self.main_sources), style=PRIMARY_BTN_STYLE
-        )
-        self.main_remove_btn = make_button("dangerGhostBtn", self.main_sources.remove_selected, enabled=False)
-        self.main_clear_btn = make_button("dangerGhostBtn", self.main_sources.clear)
+        self.org_step_import = StepCard(2)
+        self.main_add_folder_btn = make_button("primaryBtn", lambda: self._add_source_folder(self.main_sources))
+        self.main_remove_btn = make_button("dangerQuietBtn", self.main_sources.remove_selected, enabled=False)
+        self.main_clear_btn = make_button("dangerQuietBtn", self.main_sources.clear)
         for btn in (self.main_add_folder_btn, self.main_remove_btn, self.main_clear_btn):
-            header.addWidget(btn)
-        card_lay.addLayout(header)
-        card_lay.addWidget(self.main_sources)
-        lay.addWidget(self.main_import_card)
+            self.org_step_import.add_action(btn)
+        self.org_step_import.body.addWidget(self.main_sources)
+        lay.addWidget(self.org_step_import)
 
-        lay.addStretch()
-        self.info_btn_main = self._make_info_footer(lay)
-        return _wrap_in_scroll(body)
+        # 3 · options
+        self.org_step_options = StepCard(3)
+        self.org_remove_duplicates_opt = OptionRow()
+        self.org_allow_duplicates_opt = OptionRow()
+        self.org_allow_duplicates_opt.toggled.connect(self._sync_duplicate_option_state)
+        self.org_safe_temp_opt = OptionRow(checked=True)
+        for opt in (self.org_remove_duplicates_opt, self.org_allow_duplicates_opt, self.org_safe_temp_opt):
+            self.org_step_options.body.addWidget(opt)
+        self.main_page_note_label = make_hint()
+        self.org_step_options.body.addWidget(self.main_page_note_label)
+        lay.addWidget(self.org_step_options)
+
+        lay.addStretch(1)
+        return scroll

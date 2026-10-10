@@ -1,11 +1,20 @@
-
 from .theme import (
     C_ACCENT,
-    C_ACCENT_DIM,
+    C_ACCENT_HOVER,
+    C_ACCENT_PRESSED,
+    C_ACCENT_SOFT,
     C_BG,
     C_BORDER,
     C_BORDER2,
     C_DANGER,
+    C_DANGER_SOFT,
+    C_DISABLED,
+    C_LOG_BG,
+    C_LOG_TEXT,
+    C_SIDEBAR,
+    C_SIDEBAR_HOVER,
+    C_SIDEBAR_MUTED,
+    C_SIDEBAR_TEXT,
     C_SURFACE,
     C_SURFACE2,
     C_SURFACE3,
@@ -20,144 +29,121 @@ def global_stylesheet(font_family: str) -> str:
     return f"""
     * {{ font-family: "{ff}"; }}
     QMainWindow, QWidget#central {{ background: {C_BG}; }}
+    QToolTip {{ background: {C_TEXT}; color: #ffffff; border: none; padding: 5px 8px; }}
 
-    /* Titlebar */
-    QWidget#titlebar {{ background: {C_SURFACE}; border-bottom: 1px solid {C_BORDER2}; }}
-    QWidget#workflowBar {{ background: {C_SURFACE}; border-bottom: 1px solid {C_BORDER2}; }}
-    QWidget#contentCard {{
-        background: {C_SURFACE};
-        border: 1px solid {C_BORDER2};
-        border-radius: 12px;
+    /* ---------- sidebar ---------- */
+    QWidget#sidebar {{ background: {C_SIDEBAR}; }}
+    QLabel#brandName {{ color: {C_SIDEBAR_TEXT}; font-size: 22px; font-weight: 700; }}
+    QLabel#brandTag {{ color: {C_SIDEBAR_MUTED}; font-size: 12px; }}
+    QLabel#sidebarCaption {{ color: {C_SIDEBAR_MUTED}; font-size: 11px; font-weight: 700; }}
+    QWidget#navItem {{ background: transparent; border-radius: 10px; }}
+    QWidget#navItem:hover {{ background: {C_SIDEBAR_HOVER}; }}
+    QWidget#navItem[active="true"] {{ background: {C_SIDEBAR_ACTIVE}; }}
+    QComboBox#langSelector {{
+        background: {C_SURFACE}; color: {C_TEXT}; border: 1px solid {C_BORDER2};
+        border-radius: 8px; padding: 6px 10px; font-size: 13px;
     }}
-    QLabel#pageTitle {{ color:{C_TEXT}; font-size:24px; font-weight:700; }}
-    QLabel#pageDescription {{ color:{C_TEXT3}; font-size:13px; }}
-    QLabel#runTitle {{ color:{C_TEXT}; font-size:18px; font-weight:700; }}
-    QLabel#runSummary {{ color:{C_TEXT3}; font-size:13px; }}
+    QComboBox#langSelector QAbstractItemView {{
+        background: {C_SURFACE}; color: {C_TEXT}; border: 1px solid {C_BORDER2};
+        selection-background-color: {C_ACCENT_SOFT}; selection-color: {C_TEXT};
+    }}
+    QPushButton#sidebarBtn {{
+        background: transparent; color: {C_SIDEBAR_MUTED}; border: none; border-radius: 8px;
+        padding: 8px 10px; font-size: 13px; font-weight: 600; text-align: left;
+    }}
+    QPushButton#sidebarBtn:hover {{ background: {C_SIDEBAR_HOVER}; color: {C_SIDEBAR_TEXT}; }}
 
-    /* Scroll areas */
-    QScrollArea {{ background: transparent; border: none; }}
-    QScrollBar:vertical {{ background: transparent; width: 8px; margin: 0; }}
-    QScrollBar::handle:vertical {{ background: {C_SURFACE3}; border-radius: 4px; min-height: 28px; }}
+    /* ---------- pages ---------- */
+    QScrollArea#pageScroll {{ background: {C_BG}; border: none; }}
+    QWidget#pageBody {{ background: {C_BG}; }}
+    QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
+    QScrollBar::handle:vertical {{ background: {C_BORDER2}; border-radius: 4px; min-height: 28px; }}
+    QScrollBar::handle:vertical:hover {{ background: {C_TEXT3}; }}
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
     QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
 
-    /* Source list container */
-    QWidget#sourceContainer {{ background: {C_SURFACE}; border: 1px solid {C_BORDER2}; border-radius: 10px; }}
-    QWidget#sourceHeaderBar  {{ background: transparent; border-bottom: 1px solid {C_BORDER2}; }}
-
-    /* Output path input */
-    QLineEdit#outputPath {{
-        background: {C_SURFACE}; border: 1px solid {C_BORDER2}; border-radius: 8px;
-        color: {C_TEXT}; padding: 10px 12px; font-size: 15px;
+    QLabel#pageTitle {{ color: {C_TEXT}; font-size: 26px; font-weight: 700; }}
+    QLabel#pageDesc {{ color: {C_TEXT3}; font-size: 14px; }}
+    QFrame#card {{ background: {C_SURFACE}; border: 1px solid {C_BORDER}; border-radius: 12px; }}
+    QLabel#stepBadge {{
+        background: {C_ACCENT_SOFT}; color: {C_ACCENT}; border-radius: 12px;
+        font-size: 12px; font-weight: 700;
     }}
-    QLineEdit#outputPath:focus {{ border-color: {C_ACCENT}; }}
+    QLabel#stepTitle {{ color: {C_TEXT}; font-size: 15px; font-weight: 700; }}
+    QLabel#hint {{ color: {C_TEXT3}; font-size: 12px; }}
+    QLabel#optionTitle {{ color: {C_TEXT}; font-size: 14px; font-weight: 600; }}
+    QLabel#optionTitle:disabled {{ color: {C_DISABLED}; }}
+    QLabel#hint:disabled {{ color: {C_DISABLED}; }}
 
-    QComboBox#langSelector {{
-        background: {C_SURFACE2};
-        color: {C_TEXT};
-        border: 1px solid {C_BORDER2};
-        border-radius: 8px;
-        padding: 6px 10px;
-        font-size: 13px;
-        min-width: 92px;
-    }}
-    QComboBox#langSelector::drop-down {{ border: none; width: 22px; }}
-    QComboBox#langSelector QAbstractItemView {{
-        border: 1px solid {C_BORDER2};
-        background: {C_SURFACE};
-        color: {C_TEXT};
-        selection-background-color: {C_ACCENT_DIM};
+    QLineEdit#pathInput {{
+        background: {C_SURFACE2}; border: 1px solid {C_BORDER2}; border-radius: 8px;
+        color: {C_TEXT}; padding: 9px 12px; font-size: 14px;
     }}
 
-    QPushButton#infoBtn {{
-        background: {C_SURFACE2};
-        color: {C_TEXT2};
-        border: 1px solid {C_BORDER2};
-        border-radius: 14px;
-        font-size: 15px;
-        font-weight: 700;
-        min-width: 28px;
-        min-height: 28px;
-        max-width: 28px;
-        max-height: 28px;
+    /* ---------- folder list ---------- */
+    QFrame#listBox {{ background: {C_SURFACE}; border: 1px solid {C_BORDER2}; border-radius: 10px; }}
+    QFrame#listBox[dragOver="true"] {{ background: {C_ACCENT_SOFT}; border: 1px dashed {C_ACCENT}; }}
+    QWidget#listHeader {{ background: {C_SURFACE2}; border-top-left-radius: 10px; border-top-right-radius: 10px; }}
+    QLabel#listHeaderText {{ color: {C_TEXT3}; font-size: 12px; font-weight: 700; }}
+    QLabel#listEmpty {{ color: {C_TEXT3}; font-size: 14px; }}
+    QWidget#sourceRow {{ background: transparent; border-bottom: 1px solid {C_BORDER}; }}
+    QWidget#sourceRow:hover {{ background: {C_SURFACE2}; }}
+    QWidget#sourceRow[selected="true"] {{ background: {C_ACCENT_SOFT}; }}
+    QLabel#rowPath {{ color: {C_TEXT}; font-size: 14px; }}
+    QPushButton#rowRemoveBtn {{
+        background: transparent; color: {C_TEXT3}; border: none; border-radius: 6px; font-size: 12px;
     }}
-    QPushButton#infoBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; border-color: {C_ACCENT}; }}
-    QPushButton#infoBtn:pressed {{ background: {C_ACCENT_DIM}; }}
+    QPushButton#rowRemoveBtn:hover {{ background: {C_DANGER_SOFT}; color: {C_DANGER}; }}
 
-    /* Log area */
+    /* ---------- buttons ---------- */
+    QPushButton#primaryBtn {{
+        background: {C_ACCENT}; color: #ffffff; border: 1px solid {C_ACCENT}; border-radius: 8px;
+        padding: 7px 14px; font-size: 13px; font-weight: 600;
+    }}
+    QPushButton#primaryBtn:hover {{ background: {C_ACCENT_HOVER}; border-color: {C_ACCENT_HOVER}; }}
+    QPushButton#primaryBtn:pressed {{ background: {C_ACCENT_PRESSED}; border-color: {C_ACCENT_PRESSED}; }}
+    QPushButton#primaryBtn:disabled {{ background: {C_SURFACE3}; border-color: {C_SURFACE3}; color: {C_DISABLED}; }}
+
+    QPushButton#secondaryBtn {{
+        background: {C_SURFACE}; color: {C_TEXT}; border: 1px solid {C_BORDER2}; border-radius: 8px;
+        padding: 7px 14px; font-size: 13px; font-weight: 600;
+    }}
+    QPushButton#secondaryBtn:hover {{ background: {C_SURFACE2}; }}
+    QPushButton#secondaryBtn:pressed {{ background: {C_SURFACE3}; }}
+    QPushButton#secondaryBtn:disabled {{ color: {C_DISABLED}; border-color: {C_BORDER}; }}
+
+    QPushButton#quietBtn, QPushButton#dangerQuietBtn {{
+        background: transparent; color: {C_TEXT2}; border: none; border-radius: 8px;
+        padding: 7px 10px; font-size: 13px; font-weight: 600;
+    }}
+    QPushButton#quietBtn:hover {{ background: {C_SURFACE2}; color: {C_TEXT}; }}
+    QPushButton#dangerQuietBtn:hover {{ background: {C_DANGER_SOFT}; color: {C_DANGER}; }}
+    QPushButton#quietBtn:disabled, QPushButton#dangerQuietBtn:disabled {{ color: {C_DISABLED}; }}
+
+    QPushButton#startBtn {{
+        background: {C_ACCENT}; color: #ffffff; border: 1px solid {C_ACCENT}; border-radius: 10px;
+        padding: 11px 28px; font-size: 16px; font-weight: 700; min-width: 150px;
+    }}
+    QPushButton#startBtn:hover {{ background: {C_ACCENT_HOVER}; border-color: {C_ACCENT_HOVER}; }}
+    QPushButton#startBtn:pressed {{ background: {C_ACCENT_PRESSED}; border-color: {C_ACCENT_PRESSED}; }}
+    QPushButton#startBtn:disabled {{ background: {C_SURFACE3}; border-color: {C_SURFACE3}; color: {C_DISABLED}; }}
+
+    /* ---------- action bar + log ---------- */
+    QWidget#actionBar {{ background: {C_SURFACE}; border-top: 1px solid {C_BORDER}; }}
+    QLabel#statusText {{ color: {C_TEXT}; font-size: 14px; font-weight: 600; }}
+    QWidget#statChip {{ background: {C_SURFACE2}; border-radius: 12px; }}
+    QLabel#chipLabel {{ color: {C_TEXT3}; font-size: 12px; }}
+    QProgressBar {{ background: transparent; border: none; }}
+    QProgressBar::chunk {{ background: {C_ACCENT}; }}
+    QWidget#logPanel {{ background: {C_LOG_BG}; }}
+    QLabel#logTitle {{ color: {C_LOG_TEXT}; font-size: 12px; font-weight: 700; }}
+    QPushButton#logClearBtn {{
+        background: transparent; color: {C_LOG_TEXT}; border: none; border-radius: 6px;
+        padding: 3px 8px; font-size: 12px;
+    }}
+    QPushButton#logClearBtn:hover {{ background: #1f2736; }}
     QTextEdit#logText {{
-        background: {C_SURFACE}; border: none; border-radius: 0;
-        color: {C_TEXT2}; font-size: 13px;
+        background: {C_LOG_BG}; color: {C_LOG_TEXT}; border: none; padding: 4px 18px 10px 18px; font-size: 12px;
         font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", "Courier New", monospace;
     }}
-
-    /* Right panel */
-    QWidget#rightPanel {{ background: {C_SURFACE}; border-left: 1px solid {C_BORDER2}; }}
-
-    /* Start button */
-    QPushButton#startBtn {{
-        background: {C_ACCENT}; color: #ffffff; border: none;
-        border-radius: 10px; font-size: 20px; font-weight: 700; padding: 14px;
-    }}
-    QPushButton#startBtn:hover {{ background: #242424; }}
-    QPushButton#startBtn:pressed {{ background: #000000; }}
-    QPushButton#startBtn:disabled {{
-        background: #4a4a4a; color: #f2f2f2; border: 1px solid #4a4a4a;
-    }}
-
-    /* Secondary buttons */
-    QPushButton#primaryBtn {{
-        background-color: #1b1b1b; color: #ffffff; border: 1px solid #1b1b1b;
-        border-radius: 7px; padding: 8px 14px; font-size: 14px; font-weight: 600;
-    }}
-    QPushButton#primaryBtn:hover {{ background-color: #000000; border-color: #000000; }}
-    QPushButton#primaryBtn:pressed {{ background-color: #343434; border-color: #343434; }}
-    QPushButton#primaryBtn:disabled {{ background-color: #4a4a4a; color: #f2f2f2; border-color: #4a4a4a; }}
-
-    QPushButton#ghostBtn {{
-        background: {C_SURFACE2}; color: {C_TEXT}; border: 1px solid {C_BORDER2};
-        border-radius: 7px; padding: 8px 12px; font-size: 14px;
-    }}
-    QPushButton#ghostBtn:hover {{ background: {C_SURFACE3}; }}
-    QPushButton#ghostBtn:disabled {{ color: {C_TEXT3}; }}
-
-    QPushButton#dangerGhostBtn {{
-        background: transparent; color: {C_TEXT3}; border: 1px solid {C_BORDER};
-        border-radius: 7px; padding: 8px 12px; font-size: 14px;
-    }}
-    QPushButton#dangerGhostBtn:hover {{ background: rgba(20,20,20,0.08); color: {C_DANGER}; border-color: {C_BORDER2}; }}
-    QPushButton#dangerGhostBtn:disabled {{ color: {C_TEXT3}; }}
-
-    QPushButton#tinyBtn {{
-        background: transparent; color: {C_TEXT3}; border: none;
-        border-radius: 5px; padding: 3px 8px; font-size: 12px;
-    }}
-    QPushButton#tinyBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
-
-    QPushButton#pageModeBtn {{
-        background: transparent; color: {C_TEXT2}; border: 1px solid transparent;
-        border-radius: 9px; padding: 9px 14px; font-size: 13px; font-weight: 600;
-    }}
-    QPushButton#pageModeBtn:hover {{ background: {C_SURFACE3}; color: {C_TEXT}; }}
-    QPushButton#pageModeBtn[active="true"] {{
-        background: {C_ACCENT}; color: #ffffff; border: 1px solid {C_ACCENT};
-    }}
-
-    /* Checkbox */
-    QCheckBox {{ color: {C_TEXT2}; font-size: 14px; spacing: 8px; }}
-    QCheckBox::indicator {{
-        width: 18px; height: 18px; border-radius: 4px;
-        border: 1.5px solid {C_BORDER2}; background: {C_SURFACE};
-    }}
-    QCheckBox::indicator:checked {{
-        background: {C_ACCENT}; border-color: {C_ACCENT};
-        image: none;
-    }}
-    QCheckBox::indicator:hover {{ border-color: {C_ACCENT}; }}
-
-    /* Splitter */
-    QSplitter::handle {{ background: {C_BORDER2}; width: 1px; }}
-
-    /* Note label */
-    QLabel#noteLabel {{ color: {C_TEXT3}; font-size: 13px; line-height: 1.5; }}
     """

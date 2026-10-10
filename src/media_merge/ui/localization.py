@@ -1,4 +1,4 @@
-"""All user-visible text assignment. Single source of truth (the old layout.py copy is gone)."""
+"""All user-visible text assignment. Single source of truth for UI strings."""
 from ..constants import (
     APP_FALLBACK_TITLE,
     LANGUAGE_NATIVE_NAMES,
@@ -6,7 +6,21 @@ from ..constants import (
     MODE_COPY_KEEP,
     MODE_MOVE,
     WORKFLOW_INSIDE_FOLDER,
+    WORKFLOW_MAIN_FOLDER,
+    WORKFLOW_MERGE,
 )
+
+_NAV_TEXT = {
+    WORKFLOW_MERGE: ("page_mode_merge", "nav_desc_merge"),
+    WORKFLOW_MAIN_FOLDER: ("page_mode_main_folder", "nav_desc_main"),
+    WORKFLOW_INSIDE_FOLDER: ("page_mode_inside_folder", "nav_desc_inside"),
+}
+
+_START_TEXT = {
+    WORKFLOW_MERGE: "btn_start_merge",
+    WORKFLOW_MAIN_FOLDER: "btn_start_main",
+    WORKFLOW_INSIDE_FOLDER: "btn_start_inside",
+}
 
 
 class AppLocalizationMixin:
@@ -20,86 +34,84 @@ class AppLocalizationMixin:
             selector.setCurrentIndex(selected)
         selector.blockSignals(False)
 
+    def _update_start_text(self):
+        key = "status_processing" if self.is_running else _START_TEXT[self._current_workflow]
+        self.start_btn.setText(self.t(key))
+
     def _retranslate_ui(self):
         t = self.t
-        self.setWindowTitle(t("app_title") or APP_FALLBACK_TITLE)
-        self.app_name_label.setText(t("app_title") or APP_FALLBACK_TITLE)
-        self._title_desc_full = t("app_desc")
-        self._refresh_title_desc()
-        self.lang_label.setText(t("label_language"))
-        self._retranslate_language_selector()
+        title = t("app_title") or APP_FALLBACK_TITLE
+        self.setWindowTitle(title)
 
-        # section headings
-        self.source_section_label.setText("1  " + t("section_input").upper())
-        self.output_section_label.setText("2  " + t("section_output").upper())
-        self.mode_section_label.setText("3  " + t("section_mode").upper())
-        self.opt_section_label.setText("4  " + t("section_options").upper())
-        self.log_section_label.setText(t("section_log").upper())
-        self.main_output_section_label.setText(t("main_page_target").upper())
+        # sidebar
+        self.app_name_label.setText(title)
+        self.app_tagline_label.setText(t("app_tagline"))
+        self.nav_caption_label.setText(t("nav_caption").upper())
+        for workflow, (name_key, desc_key) in _NAV_TEXT.items():
+            self._nav_items[workflow].set_texts(t(name_key), t(desc_key))
+        self.lang_label.setText(t("label_language").upper())
+        self._retranslate_language_selector()
+        self.about_btn.setText(t("btn_about"))
+
+        is_inside = self._current_workflow == WORKFLOW_INSIDE_FOLDER
+
+        # merge page
         self.merge_page_title.setText(t("merge_page_title"))
         self.merge_page_desc.setText(t("merge_page_desc"))
-
-        # workflow tabs
-        self.page_btn_merge.setText(t("page_mode_merge"))
-        self.page_btn_main.setText(t("page_mode_main_folder"))
-        self.page_btn_inside.setText(t("page_mode_inside_folder"))
-
-        # buttons
-        add_text = "+ " + t("btn_add_folder")
-        self.add_folder_btn.setText(add_text)
-        self.main_add_folder_btn.setText(add_text)
+        self.merge_step_sources.set_title(t("section_input"))
+        self.merge_step_output.set_title(t("section_output"))
+        self.merge_step_mode.set_title(t("section_mode"))
+        self.merge_step_options.set_title(t("section_options"))
+        self.add_folder_btn.setText("+  " + t("btn_add_folder"))
         self.edit_prefix_btn.setText(t("btn_edit_prefix"))
-        for btn in (self.remove_btn, self.main_remove_btn):
-            btn.setText(t("btn_remove_selected"))
-        for btn in (self.clear_btn, self.main_clear_btn):
-            btn.setText(t("btn_clear_all"))
-        for btn in (self.output_btn, self.main_output_btn):
-            btn.setText(t("btn_select_output"))
-        self.start_btn.setText(t("status_processing") if self.is_running else t("btn_start"))
-        self.cancel_btn.setText(t("btn_cancel"))
-        self._clear_log_btn.setText(t("btn_clear_log"))
-
-        # source lists
+        self.remove_btn.setText(t("btn_remove_selected"))
+        self.clear_btn.setText(t("btn_clear_all"))
         self.merge_sources.retranslate(t("col_folder"), t("col_prefix"), t("empty_no_source"))
-        self.main_sources.retranslate(t("col_folder"), "", t("empty_no_main_source"))
-        self.output_input.setPlaceholderText(t("section_output"))
-        self.main_output_input.setPlaceholderText(t("main_page_target"))
+        self.output_btn.setText(t("btn_select_output"))
+        self.output_input.setPlaceholderText(t("placeholder_no_folder"))
 
-        # mode cards
         mode_text = {
-            MODE_COPY_KEEP: (t("mode_copy_keep"), t("mode_desc_copy_keep")),
-            MODE_COPY_DELETE: (t("mode_copy_delete"), t("mode_desc_copy_delete")),
-            MODE_MOVE: (t("mode_move"), t("mode_desc_move")),
+            MODE_COPY_KEEP: ("mode_copy_keep", "mode_desc_copy_keep"),
+            MODE_COPY_DELETE: ("mode_copy_delete", "mode_desc_copy_delete"),
+            MODE_MOVE: ("mode_move", "mode_desc_move"),
         }
-        for key, (title, desc) in mode_text.items():
-            self.mode_cards[key].title_lbl.setText(title)
-            self.mode_cards[key].desc_lbl.setText(desc)
+        for key, (name_key, desc_key) in mode_text.items():
+            self.mode_cards[key].set_texts(t(name_key), t(desc_key))
 
-        # options
-        for box in (self.clear_output_checkbox, self.main_clear_output_checkbox):
-            box.setText(t("opt_clear_output"))
-        for box in (self.allow_duplicates_checkbox, self.main_allow_duplicates_checkbox):
-            box.setText(t("opt_allow_duplicates"))
-        for box in (self.safe_temp_checkbox, self.main_safe_temp_checkbox):
-            box.setText(t("opt_safe_temp_workspace"))
-        self.main_remove_duplicates_checkbox.setText(t("opt_remove_duplicates"))
+        self.clear_output_opt.set_texts(t("opt_clear_output"), t("opt_clear_output_hint"))
+        self.allow_duplicates_opt.set_texts(t("opt_allow_duplicates"), t("opt_allow_duplicates_hint"))
+        self.safe_temp_opt.set_texts(t("opt_safe_temp_workspace"), t("opt_safe_temp_workspace_hint"))
         self.mode_note_label.setText(t("mode_note"))
 
-        # organizer page text depends on the workflow
-        prefix = "inside" if self._current_workflow == WORKFLOW_INSIDE_FOLDER else "main"
+        # organizer page (text depends on the workflow)
+        prefix = "inside" if is_inside else "main"
         self.main_page_title.setText(t(f"{prefix}_page_title"))
         self.main_page_desc.setText(t(f"{prefix}_page_desc"))
         self.main_page_note_label.setText(t(f"{prefix}_page_note"))
-        self.main_import_section_label.setText(t(f"{prefix}_page_import_section").upper())
+        self.org_step_target.set_title(t(f"{prefix}_page_target"))
+        self.org_step_import.set_title(t("main_page_import_section"))
+        self.org_step_options.set_title(t("section_options"))
+        self.main_output_btn.setText(t("btn_select_output"))
+        self.main_output_input.setPlaceholderText(t("placeholder_no_folder"))
+        self.main_add_folder_btn.setText("+  " + t("btn_add_folder"))
+        self.main_remove_btn.setText(t("btn_remove_selected"))
+        self.main_clear_btn.setText(t("btn_clear_all"))
+        self.main_sources.retranslate(t("col_folder"), "", t("empty_no_main_source"))
+        self.org_remove_duplicates_opt.set_texts(t("opt_remove_duplicates"), t("opt_remove_duplicates_hint"))
+        self.org_allow_duplicates_opt.set_texts(t("opt_allow_duplicates"), t("opt_allow_duplicates_hint"))
+        self.org_safe_temp_opt.set_texts(t("opt_safe_temp_workspace"), t("opt_safe_temp_workspace_hint"))
 
-        self.info_btn.setToolTip("About this app")
-        self.info_btn_main.setToolTip("About this app")
-
+        # action bar
+        self._update_start_text()
+        self.cancel_btn.setText(t("status_cancelling") if self._cancelling else t("btn_cancel"))
+        self.open_btn.setText(t("btn_open_output"))
+        self.log_title_label.setText(t("section_log").upper())
+        self.clear_log_btn.setText(t("btn_clear_log"))
+        self.log_toggle_btn.setText(t("btn_hide_log") if self.log_panel.isVisible() else t("btn_show_log"))
         self.stat_added.set_label(t("stat_added"))
         self.stat_skipped.set_label(t("stat_skipped"))
         self.stat_total.set_label(t("stat_total_out"))
         self.stat_failed.set_label(t("stat_failed"))
 
-        self._refresh_main_sources_hint()
-        self._apply_workflow_button_state()
+        self._apply_nav_state()
         self._refresh_run_summary()

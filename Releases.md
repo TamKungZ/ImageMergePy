@@ -19,6 +19,11 @@ reliable native builds.
 - Build scripts download pinned Kanit font files and verify their SHA-256 checksums instead of storing font binaries in the repository
 - Removed the slow Windows one-file executable; Windows distribution uses an installer and a clean standalone folder package
 - Cleaned build output to avoid leaving unnecessary caches and intermediate files
+- Redesigned the interface with a navigation sidebar, numbered steps, and a bottom action bar showing status, results, progress, and a collapsible log
+- Renamed workflows by what they do: Merge folders, Add to library, and Tidy a folder
+- Added drag and drop of folders onto the folder lists, and an Open folder button after a run finishes
+- Added a confirmation before any run that deletes files, and locked the inputs while a job is running
+- Fixed Add to library offering Clear output folder first, which removed the existing library before sorting; it is no longer offered there and is now off by default in Merge folders
 - Updated application version metadata to `2.0.0`
 
 ### Distribution
