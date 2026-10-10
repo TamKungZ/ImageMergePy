@@ -1,8 +1,10 @@
 import argparse
 import email.utils
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import zipfile
@@ -23,16 +25,48 @@ def is_inside(path: Path, directory: Path) -> bool:
 
 def extract_runtime(archive: Path, destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
+    root = destination.resolve()
     with zipfile.ZipFile(archive) as zip_file:
-        for member in zip_file.infolist():
+        members = zip_file.infolist()
+        for member in members:
             target = (destination / member.filename).resolve()
-            if not is_inside(target, destination.resolve()):
+            if not is_inside(target, root):
                 raise ValueError(f"Unsafe path in runtime archive: {member.filename}")
-        zip_file.extractall(destination)
+            
+        for member in members:
+            target = destination / member.filename
+            mode = (member.external_attr >> 16) & 0o7777
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if stat.S_ISLNK((member.external_attr >> 16) & 0xFFFF):
+                link_target = zip_file.read(member).decode("utf-8")
+                link_path = (target.parent / link_target).resolve()
+                if not is_inside(link_path, root):
+                    raise ValueError(f"Unsafe symlink in runtime archive: {member.filename}")
+                target.unlink(missing_ok=True)
+                os.symlink(link_target, target)
+                continue
+            with zip_file.open(member) as source, open(target, "wb") as output:
+                shutil.copyfileobj(source, output)
+            if mode:
+                target.chmod(mode | stat.S_IRUSR | stat.S_IWUSR)
 
     runtime_dir = destination / "ImageMerge"
-    if not (runtime_dir / "ImageMerge").is_file():
+    binary = runtime_dir / "ImageMerge"
+    if not binary.is_file():
         raise FileNotFoundError(f"Standalone ImageMerge executable not found in {archive}")
+    binary.chmod(binary.stat().st_mode | 0o755)
+
+    missing = [
+        member.filename
+        for member in members
+        if not member.is_dir() and not (destination / member.filename).is_symlink()
+        and not (destination / member.filename).is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(f"Runtime files missing after extraction: {missing[:5]}")
     return runtime_dir
 
 
