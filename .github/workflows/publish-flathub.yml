@@ -19,6 +19,7 @@ jobs:
   flathub-pr:
     name: Create/Update Flathub PR
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Resolve release tag
         id: meta
@@ -143,14 +144,21 @@ jobs:
           gh api "repos/${TARGET_REPO}" >/dev/null
           gh api "repos/${BASE_REPO}" >/dev/null
 
-      - name: Resolve base default branch
+      - name: Resolve base branch
         id: basemeta
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.FLATHUB_GITHUB_TOKEN }}
+          # Set the Actions variable FLATHUB_BASE_BRANCH=new-pr for a FIRST submission to
+          # flathub/flathub. Updates to an accepted app go to the app's own repo
+          # (FLATHUB_BASE_REPO=flathub/me.tamkungz.ImageMerge) on its default branch.
+          FLATHUB_BASE_BRANCH: ${{ vars.FLATHUB_BASE_BRANCH }}
         run: |
           BASE_REPO="${{ steps.target.outputs.base_repo }}"
-          DEFAULT_BRANCH="$(gh api "repos/${BASE_REPO}" --jq '.default_branch')"
+          DEFAULT_BRANCH="$FLATHUB_BASE_BRANCH"
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            DEFAULT_BRANCH="$(gh api "repos/${BASE_REPO}" --jq '.default_branch')"
+          fi
           if [ -z "$DEFAULT_BRANCH" ] || [ "$DEFAULT_BRANCH" = "null" ]; then
             echo "Unable to resolve default branch for ${BASE_REPO}"
             exit 1
@@ -204,12 +212,15 @@ jobs:
           BRANCH="${{ steps.commit.outputs.branch }}"
           BASE_BRANCH="${{ steps.basemeta.outputs.default_branch }}"
 
+          PR_BODY="$(printf 'Automated Flathub manifest update for release %s.\n\n- App ID: %s\n- Source: %s\n- SHA256: %s\n' \
+            "$VERSION" "${{ env.FLATPAK_APP_ID }}" "${{ steps.source.outputs.url }}" "${{ steps.source.outputs.sha256 }}")"
+
           if PR_URL="$(gh pr create \
             --repo "$BASE_REPO" \
             --head "${TARGET_OWNER}:${BRANCH}" \
             --base "$BASE_BRANCH" \
             --title "${{ env.FLATPAK_APP_ID }}: update to ${VERSION}" \
-            --body "Automated Flathub manifest update for release ${VERSION}.\n\n- App ID: ${{ env.FLATPAK_APP_ID }}\n- Source: ${{ steps.source.outputs.url }}\n- SHA256: ${{ steps.source.outputs.sha256 }}")"; then
+            --body "$PR_BODY")"; then
             echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
             exit 0
           fi

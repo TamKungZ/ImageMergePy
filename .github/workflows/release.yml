@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   RELEASE_TAG: ${{ inputs.tag }}
@@ -19,14 +23,105 @@ jobs:
   validate:
     name: Validate release request
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
     steps:
+      - name: Verify tag exists on GitHub
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$REQUESTED_TAG' is not a version tag such as v2.0.0."
+            exit 1
+          fi
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$REQUESTED_TAG" --jq '.object.sha' >/dev/null 2>tag_lookup_error; then
+            echo "::error::Tag '$REQUESTED_TAG' does not exist in $GITHUB_REPOSITORY. Create and push it first: git tag $REQUESTED_TAG && git push origin $REQUESTED_TAG"
+            cat tag_lookup_error >&2
+            exit 1
+          fi
+          rm -f tag_lookup_error
+
       - name: Checkout requested tag
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: Preflight required files and release notes
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          failed=0
+
+          for path in \
+            app_metadata.json Releases.md requirements.txt \
+            scripts/build_nuitka.py scripts/test_native_sdk.py \
+            native/imagemerge-sdk/Cargo.toml \
+            native/imagemerge-sdk/include/imagemerge.h \
+            native/imagemerge-sdk/README.md \
+            native/imagemerge-sdk/examples \
+            assets/icons/app-icon-1024.png assets/icons/app-icon.ico \
+            packaging/flatpak/me.tamkungz.ImageMerge.yml; do
+            if [ ! -e "$path" ]; then
+              echo "::error::Missing file required by the build: $path"
+              failed=1
+            fi
+          done
+
+          if [ ! -f snap/snapcraft.yaml ] && [ ! -f snapcraft.yaml ] \
+             && [ ! -f build-aux/snap/snapcraft.yaml ] && [ ! -f .snapcraft.yaml ]; then
+            echo "::error::Missing snapcraft.yaml (looked in snap/, repo root, build-aux/snap/)."
+            failed=1
+          fi
+
+          # Needed later by the manual publish-* workflows. Warn now, not on release day.
+          for path in packaging/flathub/me.tamkungz.ImageMerge.yml scripts/build_launchpad_source.py; do
+            if [ ! -e "$path" ]; then
+              echo "::warning::Missing file used by a later publish workflow: $path"
+            fi
+          done
+
+          python3 - <<'PY' || failed=1
+          import json, os, re
+          from pathlib import Path
+
+          meta = json.loads(Path("app_metadata.json").read_text(encoding="utf-8"))
+          for key in ("product_version", "msix_identity_name", "msix_publisher", "msix_publisher_display_name"):
+              if not str(meta.get(key, "")).strip():
+                  print(f"::error::app_metadata.json is missing '{key}'.")
+                  raise SystemExit(1)
+
+          tag = os.environ["REQUESTED_TAG"]
+          content = Path("Releases.md").read_text(encoding="utf-8")
+          entries = list(re.finditer(r"(?m)^Tag: ([^\r\n]+)\s*$", content))
+          for index, entry in enumerate(entries):
+              if entry.group(1).strip() != tag:
+                  continue
+              end = entries[index + 1].start() if index + 1 < len(entries) else len(content)
+              section = content[entry.start():end]
+              title = re.search(r"(?m)^Release title: ([^\r\n]+)\s*$", section)
+              notes = re.search(r"(?m)^Release notes:\s*$", section)
+              if title is None or notes is None:
+                  print(f"::error::Releases.md entry for {tag} needs 'Release title:' and 'Release notes:' lines.")
+                  raise SystemExit(1)
+              body = [l for l in section[notes.end():].splitlines() if l.strip() and l.strip() != "---"]
+              if not body:
+                  print(f"::error::Releases.md entry for {tag} has empty release notes.")
+                  raise SystemExit(1)
+              print(f"Releases.md OK for {tag}.")
+              break
+          else:
+              print(f"::error::No 'Tag: {tag}' entry in Releases.md.")
+              raise SystemExit(1)
+          PY
+
+          if [ "$failed" -ne 0 ]; then exit 1; fi
 
       - name: Validate tag, application version, and release state
         id: meta
@@ -41,13 +136,13 @@ jobs:
             exit 1
           fi
           version="${tag#v}"
-          metadata_version="$(python -c 'import json; print(json.load(open("app_metadata.json", encoding="utf-8"))["product_version"])')"
+          metadata_version="$(python3 -c 'import json; print(json.load(open("app_metadata.json", encoding="utf-8"))["product_version"])')"
           metadata_version="${metadata_version%.*}"
           if [ "$metadata_version" != "${version%%[-+]*}" ]; then
             echo "Tag version $version does not match app_metadata.json version $metadata_version."
             exit 1
           fi
-          sdk_version="$(python -c 'import tomllib; print(tomllib.load(open("native/imagemerge-sdk/Cargo.toml", "rb"))["package"]["version"])')"
+          sdk_version="$(python3 -c 'import tomllib; print(tomllib.load(open("native/imagemerge-sdk/Cargo.toml", "rb"))["package"]["version"])')"
           if [ "$sdk_version" != "${version%%[-+]*}" ]; then
             echo "Tag version $version does not match Native SDK version $sdk_version."
             exit 1
@@ -75,6 +170,7 @@ jobs:
     name: Package (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: validate
+    timeout-minutes: 120
     permissions:
       contents: read
     strategy:
@@ -82,12 +178,15 @@ jobs:
       matrix:
         # Pin Linux runner to Ubuntu 22.04 so AppImage/.deb/.rpm are built
         # against glibc 2.35 instead of newer glibc from ubuntu-latest.
-        os: [windows-latest, ubuntu-22.04, macos-15-intel, macos-latest]
+        # Pin both macOS runners to the same major version so the arm64 and
+        # x64 builds target the same minimum macOS (macos-latest can move to a
+        # newer major and silently raise the minimum OS for users).
+        os: [windows-latest, ubuntu-22.04, macos-15-intel, macos-15]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: refs/tags/${{ needs.validate.outputs.tag }}
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -117,7 +216,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rpm flatpak flatpak-builder squashfs-tools appstream appstream-compose snapd
+          sudo apt-get install -y ruby ruby-dev rpm flatpak flatpak-builder squashfs-tools appstream snapd
+          # Not packaged on every Ubuntu release; the Flatpak step falls back to `appstreamcli compose`.
+          sudo apt-get install -y appstream-compose || echo "appstream-compose not available; using appstreamcli compose fallback"
           if ! command -v snapcraft >/dev/null 2>&1; then
             sudo snap install snapcraft --classic
           fi
@@ -140,8 +241,9 @@ jobs:
           fi
 
           sudo gem install --no-document fpm
-          curl -L -o appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          curl --fail --location --retry 3 --retry-delay 5 -o appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
+          test -s appimagetool
 
       - name: Build Linux installers (.deb/.rpm/.AppImage)
         if: runner.os == 'Linux'
@@ -380,7 +482,6 @@ jobs:
           cp -a "$DIST_DIR"/. packaging/flatpak/flatpak-src/
 
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user --noninteractive -y flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08
 
           if ! command -v appstream-compose >/dev/null 2>&1; then
             if command -v appstreamcli >/dev/null 2>&1; then
@@ -392,7 +493,7 @@ jobs:
           fi
 
           FLATPAK_BRANCH="stable"
-          flatpak-builder --force-clean --default-branch="$FLATPAK_BRANCH" --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
+          flatpak-builder --user --install-deps-from=flathub --force-clean --default-branch="$FLATPAK_BRANCH" --repo=flatpak-repo flatpak-build-dir packaging/flatpak/me.tamkungz.ImageMerge.yml
           flatpak build-bundle flatpak-repo "release_assets/ImageMerge-linux-${ARCH_LABEL}.flatpak" me.tamkungz.ImageMerge "$FLATPAK_BRANCH"
 
       - name: Build Linux Snap package
@@ -497,8 +598,21 @@ jobs:
             param([string]$Path)
 
             if (-not (Test-Path $Path)) { throw "File for signing not found: $Path" }
-            & $signtool sign /fd SHA256 /f $pfxPath /p $env:MSIX_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $Path
-            if ($LASTEXITCODE -ne 0) { throw "signtool failed: $Path" }
+            # Timestamp servers are flaky; retry and fall back instead of failing the release.
+            $timestampServers = @(
+              "http://timestamp.digicert.com",
+              "http://timestamp.sectigo.com",
+              "http://timestamp.globalsign.com/tsa/r6advanced1"
+            )
+            foreach ($attempt in 1..3) {
+              foreach ($ts in $timestampServers) {
+                & $signtool sign /fd SHA256 /f $pfxPath /p $env:MSIX_PFX_PASSWORD /tr $ts /td SHA256 $Path
+                if ($LASTEXITCODE -eq 0) { return }
+                Write-Warning "signtool failed for $Path via $ts (attempt $attempt/3)"
+              }
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+            throw "signtool failed after retries: $Path"
           }
 
           if (-not (Test-Path "app_metadata.json")) { throw "Missing app_metadata.json" }
@@ -863,6 +977,7 @@ jobs:
     name: Create draft release
     runs-on: ubuntu-latest
     needs: [validate, build]
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -873,10 +988,44 @@ jobs:
           merge-multiple: true
           path: release_files
 
+      - name: Verify every expected release asset exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=(
+            ImageMerge-linux-x64.deb
+            ImageMerge-linux-x64.rpm
+            ImageMerge-linux-x64.AppImage
+            ImageMerge-linux-x64.flatpak
+            ImageMerge-linux-x64.snap
+            ImageMerge-linux-x64.zip
+            ImageMerge-SDK-linux-x64.zip
+            ImageMerge-windows-x64.msi
+            ImageMergeGUI-windows-x64-msstore.msi
+            ImageMergeGUI-windows-x64.msix
+            ImageMerge-windows-x64.zip
+            ImageMerge-SDK-windows-x64.zip
+            ImageMerge-macos-binary-arm64.zip
+            ImageMerge-macos-binary-x64.zip
+            ImageMerge-macos-app-arm64.zip
+            ImageMerge-macos-app-x64.zip
+            ImageMerge-SDK-macos-arm64.zip
+            ImageMerge-SDK-macos-x64.zip
+          )
+          missing=0
+          for name in "${expected[@]}"; do
+            if [ ! -s "release_files/$name" ]; then
+              echo "::error::Expected release asset missing or empty: $name"
+              missing=1
+            fi
+          done
+          echo "Assets present:"; ls -l release_files
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+
       - name: Checkout release notes
         uses: actions/checkout@v5
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: refs/tags/${{ needs.validate.outputs.tag }}
           path: release_source
 
       - name: Prepare release notes for this version
@@ -885,7 +1034,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           import os
           import re
           from pathlib import Path
@@ -927,7 +1076,8 @@ jobs:
         shell: bash
         run: |
           cd release_files
-          sha256sum ImageMerge-* > SHA256SUMS
+          # ImageMerge* also covers ImageMergeGUI-* (MSIX / Microsoft Store MSI).
+          sha256sum ImageMerge* > SHA256SUMS
 
       - name: Import GPG keys (Linux + Windows)
         shell: bash
@@ -997,4 +1147,5 @@ jobs:
           name: ${{ steps.notes.outputs.name }}
           draft: true
           body_path: release_notes.md
+          fail_on_unmatched_files: true
           files: release_files/*

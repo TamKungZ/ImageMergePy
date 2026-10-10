@@ -23,15 +23,16 @@ jobs:
   publish:
     name: Upload Ubuntu ${{ matrix.suite }} source
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         suite: [jammy, noble, resolute]
     steps:
       - name: Check out release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }}
 
       - name: Validate release and suite
         id: meta
@@ -63,7 +64,7 @@ jobs:
           fi
 
           version="${tag#v}"
-          metadata_version="$(python -c 'import json; print(json.load(open("app_metadata.json", encoding="utf-8"))["product_version"].rsplit(".", 1)[0])')"
+          metadata_version="$(python3 -c 'import json; print(json.load(open("app_metadata.json", encoding="utf-8"))["product_version"].rsplit(".", 1)[0])')"
           if [ "$version" != "$metadata_version" ]; then
             echo "Tag version $version does not match app metadata version $metadata_version."
             exit 1
@@ -135,6 +136,13 @@ jobs:
             exit 1
           fi
 
+          # Launchpad only accepts uploads signed by a key registered to the uploader's account.
+          maint_lc="$(printf '%s' "$MAINTAINER_EMAIL" | tr '[:upper:]' '[:lower:]')"
+          if ! gpg --batch --with-colons --list-secret-keys "$GPG_KEY_ID" 2>/dev/null \
+               | awk -F: '$1=="uid"{print tolower($10)}' | grep -qF "<${maint_lc}>"; then
+            echo "::warning::The signing key has no user ID with <$MAINTAINER_EMAIL>. Launchpad may reject the upload if the key/email is not registered on your account."
+          fi
+
           signing_command="$RUNNER_TEMP/gpg-launchpad-sign"
           cat > "$signing_command" <<'EOF'
           #!/bin/sh
@@ -145,7 +153,7 @@ jobs:
           chmod 0700 "$signing_command"
 
           mkdir -p "$RUNNER_TEMP/launchpad-source"
-          python scripts/build_launchpad_source.py \
+          python3 scripts/build_launchpad_source.py \
             --archive "$RUNNER_TEMP/imagemerge-release/ImageMerge-linux-x64.zip" \
             --tag "${{ steps.meta.outputs.tag }}" \
             --suite "${{ matrix.suite }}" \
