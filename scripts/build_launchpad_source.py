@@ -6,6 +6,7 @@ import re
 import shutil
 import stat
 import subprocess
+import tarfile
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -23,6 +24,22 @@ def is_inside(path: Path, directory: Path) -> bool:
     return True
 
 
+def normalize_line_endings(*paths: Path) -> None:
+    crlf = bytes((0x0D, 0x0A))
+    lf = bytes((0x0A,))
+    for root in paths:
+        if root.is_dir():
+            candidates = [root, *root.rglob("*")]
+        else:
+            candidates = [root]
+        for path in candidates:
+            if not path.is_file() or path.is_symlink():
+                continue
+            data = path.read_bytes()
+            if crlf in data:
+                path.write_bytes(data.replace(crlf, lf))
+
+
 def extract_runtime(archive: Path, destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     root = destination.resolve()
@@ -32,7 +49,7 @@ def extract_runtime(archive: Path, destination: Path) -> Path:
             target = (destination / member.filename).resolve()
             if not is_inside(target, root):
                 raise ValueError(f"Unsafe path in runtime archive: {member.filename}")
-            
+
         for member in members:
             target = destination / member.filename
             mode = (member.external_attr >> 16) & 0o7777
@@ -131,6 +148,7 @@ def build_source_package(
             root / "packaging" / "launchpad" / "imagemerge",
             package_dir / "packaging" / "imagemerge",
         )
+        normalize_line_endings(package_dir / "debian", package_dir / "packaging")
 
         changelog = (
             f"imagemerge ({debian_version}) {suite}; urgency=medium\n\n"
@@ -147,6 +165,7 @@ def build_source_package(
                 "dpkg-buildpackage",
                 "-S",
                 "-sa",
+                "-I.imagemerge-keep-everything",
                 f"-k{signing_key}",
                 f"-p{signing_command}",
             ],
@@ -154,9 +173,33 @@ def build_source_package(
             check=True,
         )
 
+        source_tarballs = list(work_dir.glob("*.tar.xz"))
+        if len(source_tarballs) != 1:
+            raise FileNotFoundError(
+                f"Expected one source tarball, found {len(source_tarballs)}"
+            )
+        expected = sum(
+            1
+            for path in (package_dir / "runtime").rglob("*")
+            if path.is_file() and not path.is_symlink()
+        )
+        with tarfile.open(source_tarballs[0]) as tar_file:
+            packed = sum(
+                1
+                for member in tar_file.getmembers()
+                if member.isfile() and "/runtime/" in member.name
+            )
+        if packed != expected:
+            raise RuntimeError(
+                f"Source tarball holds {packed} runtime files but the runtime has "
+                f"{expected}; refusing to upload an incomplete package"
+            )
+
         changes_files = list(work_dir.glob("*_source.changes"))
         if len(changes_files) != 1:
-            raise FileNotFoundError(f"Expected one source .changes file, found {len(changes_files)}")
+            raise FileNotFoundError(
+                f"Expected one source .changes file, found {len(changes_files)}"
+            )
         changes_file = changes_files[0]
         for artifact in work_dir.iterdir():
             if artifact.is_file() and artifact.suffix in {".changes", ".dsc", ".xz", ".buildinfo"}:
