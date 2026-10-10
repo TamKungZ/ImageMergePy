@@ -345,7 +345,18 @@ def build_macos(root: Path):
     app_cmd.append(ENTRY_FILE)
     run_cmd(app_cmd, root, retries=2, retry_cleanup=lambda: clean_build_artifacts(out_app_dir))
 
+    app_candidates = sorted(p for p in out_app_dir.glob("*.app") if p.is_dir())
+    if not app_candidates:
+        raise FileNotFoundError(
+            f"macOS app bundle build did not produce any .app in: {out_app_dir}"
+        )
+    produced_bundle = app_candidates[0]
     app_bundle = out_app_dir / f"{APP_NAME}.app"
+    if produced_bundle != app_bundle:
+        if app_bundle.exists():
+            shutil.rmtree(app_bundle)
+        produced_bundle.rename(app_bundle)
+        print(f"Renamed {produced_bundle.name} -> {app_bundle.name}")
     if not app_bundle.is_dir():
         raise FileNotFoundError(f"macOS app bundle build did not produce: {app_bundle}")
     print(f"App bundle ready: {app_bundle}")
