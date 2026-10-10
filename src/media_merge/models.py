@@ -26,6 +26,7 @@ class ProcessOptions:
     remove_duplicates_in_place: bool = False
     allow_duplicate_files: bool = False
     use_safe_temp_workspace: bool = True
+    dry_run: bool = False
 
 
 @dataclass
@@ -73,12 +74,12 @@ class JobContext:
     """Everything one pipeline run needs, passed to merger / inside_organizer."""
 
     options: ProcessOptions
-    work_dir: Path  # folder that is actually modified (workspace copy or the real output)
+    work_dir: Path
     logger: Logger
     tr: Callable[..., str] = t_identity
     cancel: CancelToken = field(default_factory=CancelToken)
     progress: ProgressFn = lambda done, total: None
     stats: ProcessStats = field(default_factory=ProcessStats)
-    defer_deletes: bool = False  # safe mode: delete sources only after the commit
+    defer_deletes: bool = False
     pending_deletes: list[Path] = field(default_factory=list)
     scan_folders: list[SourceFolder] = field(default_factory=list)
