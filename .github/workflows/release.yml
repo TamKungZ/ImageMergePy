@@ -717,7 +717,7 @@ jobs:
               '  <Fragment>',
               '    <ComponentGroup Id="ImageMergeCommandPath">',
               '      <Component Id="CommandPathComponent" Directory="INSTALLFOLDER" Guid="*">',
-              '        <Environment Id="ImageMergePathEnvironment" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" Separator=";" />
+              '        <Environment Id="ImageMergePathEnvironment" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" Separator=";" />',
               ('        <RegistryValue Root="HKLM" Key="Software\TamKungZ_\{0}" Name="CommandPath" Type="integer" Value="1" KeyPath="yes" />' -f $RegistryName),
               '      </Component>',
               '    </ComponentGroup>',
