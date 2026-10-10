@@ -26,8 +26,18 @@ ARCH_ALIASES = {
 }
 
 
-def run_cmd(cmd: list[str], cwd: Path, retries: int = 1, retry_cleanup=None):
-    print("$", " ".join(cmd))
+def run_cmd(
+    cmd: list[str],
+    cwd: Path,
+    retries: int = 1,
+    retry_cleanup=None,
+    secrets: tuple[str, ...] = (),
+):
+    shown = " ".join(cmd)
+    for secret in secrets:
+        if secret:
+            shown = shown.replace(secret, "***")
+    print("$", shown)
     last_error = None
 
     for attempt in range(1, retries + 1):
@@ -55,8 +65,13 @@ def normalize_arch(arch_value: str) -> str:
 
 
 def detect_host_arch() -> str:
-    machine = platform.machine().strip().lower()
-    return normalize_arch(machine)
+    machine = normalize_arch(platform.machine())
+    if sys.maxsize <= 2**32:
+        if machine == "x64":
+            return "x86"
+        if machine == "arm64":
+            return "arm"
+    return machine
 
 
 def resolve_target_arch() -> tuple[str, str]:
@@ -214,7 +229,7 @@ def sign_windows_binary(binary_path: Path):
         return
 
     pfx_path = os.environ.get("IMAGEMERGE_SIGN_PFX", "").strip()
-    pfx_password = os.environ.get("IMAGEMERGE_SIGN_PASSWORD", "").strip()
+    pfx_password = os.environ.get("IMAGEMERGE_SIGN_PASSWORD", "")
     timestamp_url = os.environ.get("IMAGEMERGE_SIGN_TIMESTAMP", "http://timestamp.digicert.com").strip()
 
     if not pfx_path or not pfx_password:
@@ -235,7 +250,7 @@ def sign_windows_binary(binary_path: Path):
         "SHA256",
         str(binary_path),
     ]
-    run_cmd(sign_cmd, binary_path.parent)
+    run_cmd(sign_cmd, binary_path.parent, secrets=(pfx_password,))
 
     verify_cmd = ["signtool", "verify", "/pa", "/v", str(binary_path)]
     run_cmd(verify_cmd, binary_path.parent)
@@ -257,6 +272,10 @@ def nuitka_base_cmd(root: Path, output_dir: Path) -> list[str]:
     metadata_path = root / METADATA_FILE
     if metadata_path.exists():
         cmd.append(f"--include-data-file={metadata_path}=app_metadata.json")
+
+    icons_dir = root / "assets" / "icons"
+    if icons_dir.is_dir():
+        cmd.append(f"--include-data-dir={icons_dir}=assets/icons")
 
     font_dir = root / "build" / "fonts"
     font_files = sorted(font_dir.glob("*.ttf"))
@@ -363,11 +382,9 @@ def build_macos(root: Path):
 
 
 def clean_generated_build_files(root: Path) -> None:
-    generated_module = root / "src" / "media_merge" / "_embedded_fonts.py"
-    generated_module.unlink(missing_ok=True)
-    generated_fonts = root / "build" / "fonts"
-    if generated_fonts.is_dir():
-        shutil.rmtree(generated_fonts)
+    package_dir = root / "src" / "media_merge"
+    for generated_module in ("_embedded_locales.py", "_embedded_fonts.py"):
+        (package_dir / generated_module).unlink(missing_ok=True)
 
     for generated_path in (
         root / "build" / "fonts",
@@ -399,7 +416,7 @@ def main():
     host_arch, target_arch = resolve_target_arch()
 
     print(f"Build host architecture: {host_arch}")
-    print(f"Requested target architecture: {target_arch}")
+    print(f"Target architecture: {target_arch}")
 
     try:
         run_cmd(
