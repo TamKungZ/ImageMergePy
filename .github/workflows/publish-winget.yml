@@ -92,6 +92,13 @@ jobs:
                   raise SystemExit(f"Missing 'Release notes:' for {tag}")
               notes = section[notes_match.end():].lstrip("\r\n")
               notes = re.sub(r"(?s)\s*---\s*$", "", notes).rstrip()
+              # WinGet rejects ReleaseNotes longer than 10000 characters (schema error).
+              limit = 9500
+              if len(notes) > limit:
+                  suffix = "\n\n(Release notes shortened for WinGet. See the full notes on the GitHub release page.)"
+                  cut = notes.rfind("\n", 0, limit - len(suffix))
+                  notes = notes[: cut if cut > 0 else limit - len(suffix)].rstrip() + suffix
+                  print(f"Release notes shortened to {len(notes)} characters for WinGet")
               if not notes:
                   raise SystemExit(f"Empty release notes for {tag}")
               Path("release_notes.txt").write_text(notes + "\n", encoding="utf-8")
