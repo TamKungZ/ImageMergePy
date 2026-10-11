@@ -6,9 +6,15 @@ Release notes:
 Maintenance release that fixes two bugs in the Launchpad PPA package
 (`2.0.0ubuntu22.04.1`) that made `imagemerge` fail to start on Ubuntu and WSL,
 and fixes file-path and build-script problems in compiled (Nuitka) builds on
-all platforms.
+all platforms. It also fixes the Windows app closing immediately without any
+message when it is opened from the MSI install.
 
 ### Highlights
+- Fixed the Windows app not opening at all (no window, no message) when installed from the MSI
+  - The process crashed with exception `0xc0000409` right after Qt loaded `qmodernwindowsstyle.dll`; Nuitka reported a segmentation fault in the native `windows11` Qt style plugin (Qt 6.12)
+  - The app now always uses the `Fusion` style (`QT_STYLE_OVERRIDE` is set before the `QApplication` is created, and `setStyle("Fusion")` is called after), which avoids that plugin and matches the app's own stylesheet and palette
+  - Setting `QT_STYLE_OVERRIDE=Fusion` on an affected 2.0.1 install makes it start, for anyone who has already installed it
+- The GUI now writes startup problems to `%LOCALAPPDATA%\ImageMerge\error.log` (Qt messages including fatal ones, Python tracebacks, and native crash traces) and shows an error dialog on Windows if startup fails with a Python exception, instead of closing silently
 - Fixed `exec: /opt/ImageMerge/ImageMerge: Permission denied` after installing from the PPA
   - `extract_runtime()` used `zipfile.extractall()`, which does not restore Unix file permissions, so the `ImageMerge` executable was packaged as `0644`
   - The runtime is now extracted file by file with permissions restored from the zip, and `ImageMerge` is always forced to `0755`
@@ -35,6 +41,9 @@ all platforms.
 - Reproduced the missing-file cause: without `-I`, `_opcode.so`, `_ctypes.so`, `PySide6/QtCore.so`, and `libfoo.a` were left out of the tarball; with `-I.imagemerge-keep-everything` they were all kept
 - Confirmed that `../` paths in the runtime archive are rejected
 - Checked the build-script and path changes by reading the code against the build and release workflows, and simulated the source and compiled path resolution
+- Reproduced the Windows crash on a Windows 11 install of the MSI: exit code `-1073740791` (`0xc0000409`), with the app starting normally when `QT_STYLE_OVERRIDE=Fusion` is set and still crashing with `QT_QPA_PLATFORM=windows:fontengine=freetype`, which points at the `windows11` style rather than font loading
+- Confirmed from source that the GUI starts offscreen with the `fusion` style active and that `error.log` is created
+- Still to check in a real Windows build: the installed app opens without setting any environment variable
 - Still to check in real builds on all three platforms: About page shows the correct version, window icon appears, and Thai and Japanese fonts load from the `fonts` folder
 - Full `dpkg-buildpackage` and running `imagemerge` after install will be exercised by the publish workflow on the new tag
 
@@ -49,6 +58,8 @@ imagemerge --cli --input /path/to/folder --output /path/to/output
 ```
 
 ### Note
+The Windows start-up crash only affected the GUI; `ImageMerge --cli` worked, so the WinGet smoke test (which runs the CLI) did not catch it.
+
 The CLI flag is `--cli` with two dashes, and it requires `--input` and `--output`. The single-dash form `-cli` is not recognized by the argument parser and is unrelated to these two errors.
 
 The Permission denied and `_opcode.so` errors only affected the Launchpad PPA package; the GitHub Release `.deb` built with fpm was not affected.
