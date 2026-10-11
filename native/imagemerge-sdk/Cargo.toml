@@ -1,6 +1,6 @@
 [package]
 name = "imagemerge-sdk"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 description = "C ABI bridge for invoking the ImageMerge CLI"
 license = "MIT"

@@ -28,7 +28,7 @@ class LaunchpadPackageTests(unittest.TestCase):
                 zip_file.writestr("ImageMerge/ImageMerge", "binary")
 
             (root / "app_metadata.json").write_text(
-                '{"product_version":"2.0.0.0"}',
+                '{"product_version":"2.0.1.0"}',
                 encoding="utf-8",
             )
             (root / "README.md").write_text("readme", encoding="utf-8")
@@ -43,20 +43,20 @@ class LaunchpadPackageTests(unittest.TestCase):
                 self.assertIn("-kABCDEF", command)
                 self.assertIn("-pC:\\signer", command)
                 changelog = (cwd / "debian" / "changelog").read_text(encoding="utf-8")
-                self.assertIn("imagemerge (2.0.0ubuntu24.04.1) noble;", changelog)
+                self.assertIn("imagemerge (2.0.1ubuntu24.04.1) noble;", changelog)
                 control = (cwd / "debian" / "control").read_text(encoding="utf-8")
                 self.assertIn("Maintainer: TamKungZ_ <maintainer@example.org>", control)
                 self.assertTrue((cwd / "runtime" / "ImageMerge" / "ImageMerge").is_file())
                 self.assertTrue((cwd / "packaging" / "imagemerge").is_file())
-                (cwd.parent / "imagemerge_2.0.0ubuntu24.04.1_source.changes").write_text(
+                (cwd.parent / "imagemerge_2.0.1ubuntu24.04.1_source.changes").write_text(
                     "signed source changes",
                     encoding="utf-8",
                 )
-                (cwd.parent / "imagemerge_2.0.0ubuntu24.04.1.dsc").write_text(
+                (cwd.parent / "imagemerge_2.0.1ubuntu24.04.1.dsc").write_text(
                     "source descriptor",
                     encoding="utf-8",
                 )
-                (cwd.parent / "imagemerge_2.0.0ubuntu24.04.1.tar.xz").write_text(
+                (cwd.parent / "imagemerge_2.0.1ubuntu24.04.1.tar.xz").write_text(
                     "source archive",
                     encoding="utf-8",
                 )
@@ -65,7 +65,7 @@ class LaunchpadPackageTests(unittest.TestCase):
                 changes = build_source_package(
                     package_root,
                     archive,
-                    "v2.0.0",
+                    "v2.0.1",
                     "noble",
                     output_dir,
                     "ABCDEF",
@@ -74,8 +74,8 @@ class LaunchpadPackageTests(unittest.TestCase):
                 )
 
             self.assertTrue(changes.is_file())
-            self.assertTrue((output_dir / "imagemerge_2.0.0ubuntu24.04.1.dsc").is_file())
-            self.assertTrue((output_dir / "imagemerge_2.0.0ubuntu24.04.1.tar.xz").is_file())
+            self.assertTrue((output_dir / "imagemerge_2.0.1ubuntu24.04.1.dsc").is_file())
+            self.assertTrue((output_dir / "imagemerge_2.0.1ubuntu24.04.1.tar.xz").is_file())
 
 
 if __name__ == "__main__":
