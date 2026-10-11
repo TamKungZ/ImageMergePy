@@ -298,6 +298,89 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Patched manifest failed validation" }
           Write-Host "Manifest validation succeeded"
 
+      - name: Install local manifest and smoke-test CLI
+        shell: powershell
+        env:
+          VERSION_DIR: ${{ steps.generate.outputs.version_dir }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            throw "winget CLI is not available on this runner"
+          }
+
+          # Local manifests are disabled by default on some runner images.
+          winget settings --enable LocalManifestFiles
+          if ($LASTEXITCODE -ne 0) { throw "Could not enable local manifest installs" }
+
+          # Install the exact multi-file manifest generated and validated above,
+          # rather than testing the already-published community source.
+          winget install --manifest "$env:VERSION_DIR" --accept-source-agreements --accept-package-agreements --disable-interactivity --silent
+          if ($LASTEXITCODE -ne 0) { throw "Installing from the local WinGet manifest failed" }
+
+          # Find the installed binary without assuming a fixed MSI install folder.
+          $exeCandidates = @(
+            (Join-Path $env:ProgramFiles 'ImageMerge\ImageMerge.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'ImageMerge\ImageMerge.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\ImageMerge\ImageMerge.exe')
+          )
+          $uninstallRoots = @(
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          )
+          $installedApps = Get-ItemProperty -Path $uninstallRoots -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like 'ImageMerge*' }
+          foreach ($app in $installedApps) {
+            if ($app.InstallLocation) {
+              $exeCandidates += Join-Path $app.InstallLocation 'ImageMerge.exe'
+            }
+            if ($app.DisplayIcon) {
+              $iconPath = ([string]$app.DisplayIcon -replace ',\s*-?\d+$', '').Trim('"')
+              if ((Split-Path -Path $iconPath -Leaf) -ieq 'ImageMerge.exe') {
+                $exeCandidates += $iconPath
+              }
+            }
+          }
+          $exePath = $exeCandidates |
+            Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+            Select-Object -Unique -First 1
+          if (-not $exePath) {
+            $exePath = Get-ChildItem -Path $env:ProgramFiles -Filter 'ImageMerge.exe' -File -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName -First 1
+          }
+          if (-not $exePath) { throw "ImageMerge.exe was not found after local manifest installation" }
+
+          Write-Host "Testing installed binary: $exePath"
+          & $exePath --version
+          if ($LASTEXITCODE -ne 0) { throw "ImageMerge --version failed" }
+
+          # Functional smoke test: run the installed CLI against a tiny PNG and
+          # verify that it produces the expected sequentially-renamed output.
+          $testRoot = Join-Path $env:RUNNER_TEMP 'imagemerge-winget-smoke'
+          $inputDir = Join-Path $testRoot 'input'
+          $outputDir = Join-Path $testRoot 'output'
+          New-Item -ItemType Directory -Path $inputDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+          $pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+          [System.IO.File]::WriteAllBytes(
+            (Join-Path $inputDir '1.png'),
+            [Convert]::FromBase64String($pngBase64)
+          )
+
+          & $exePath --cli --input $inputDir --output $outputDir --mode copy_keep --lang en
+          if ($LASTEXITCODE -ne 0) { throw "ImageMerge CLI processing smoke test failed" }
+
+          $expectedOutput = Join-Path $outputDir '0001.png'
+          if (-not (Test-Path -LiteralPath $expectedOutput -PathType Leaf)) {
+            $actualFiles = @(Get-ChildItem -Path $outputDir -File -Recurse | ForEach-Object { $_.FullName })
+            throw "CLI did not create expected output '$expectedOutput'. Actual files: $($actualFiles -join ', ')"
+          }
+          if ((Get-Item -LiteralPath $expectedOutput).Length -eq 0) {
+            throw "CLI created an empty output file: $expectedOutput"
+          }
+          Write-Host "Local manifest install and ImageMerge CLI smoke test succeeded"
+
       - name: Submit WinGet manifest
         shell: powershell
         env:
