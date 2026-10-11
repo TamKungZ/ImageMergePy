@@ -326,8 +326,21 @@ jobs:
           if (-not $cmd) { throw "ImageMerge was not found on PATH after installation" }
           Write-Host "Resolved ImageMerge: $($cmd.Source)"
 
-          ImageMerge --version
-          if ($LASTEXITCODE -ne 0) { throw "ImageMerge --version failed" }
+          # ImageMerge.exe is a GUI-subsystem binary (Nuitka --windows-console-mode=attach),
+          # so PowerShell does not wait for it. Run via Start-Process -Wait and capture output.
+          function Invoke-ImageMerge {
+            param([string[]]$Arguments, [string]$WorkDir)
+            $out = Join-Path $env:RUNNER_TEMP ("im-out-" + [guid]::NewGuid().ToString('N') + ".txt")
+            $err = Join-Path $env:RUNNER_TEMP ("im-err-" + [guid]::NewGuid().ToString('N') + ".txt")
+            $p = Start-Process -FilePath $cmd.Source -ArgumentList $Arguments -WorkingDirectory $WorkDir `
+              -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+            Get-Content -LiteralPath $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+            Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+            return $p.ExitCode
+          }
+
+          $verExit = Invoke-ImageMerge -Arguments @('--version') -WorkDir $env:RUNNER_TEMP
+          if ($verExit -ne 0) { throw "ImageMerge --version failed (exit $verExit)" }
 
           $testRoot = Join-Path $env:RUNNER_TEMP 'imagemerge-winget-smoke'
           if (Test-Path $testRoot) { Remove-Item -Recurse -Force $testRoot }
@@ -342,13 +355,10 @@ jobs:
             [Convert]::FromBase64String($pngBase64)
           )
 
-          Push-Location $testRoot
-          try {
-            ImageMerge --cli --input $inputDir --output $outputDir --mode copy_keep --lang en
-            $cliExit = $LASTEXITCODE
-          } finally {
-            Pop-Location
-          }
+          $cliExit = Invoke-ImageMerge -WorkDir $testRoot -Arguments @(
+            '--cli', '--input', "`"$inputDir`"", '--output', "`"$outputDir`"",
+            '--mode', 'copy_keep', '--lang', 'en'
+          )
           if ($cliExit -ne 0) { throw "ImageMerge CLI processing smoke test failed (exit $cliExit)" }
 
           $expectedOutput = Join-Path $outputDir '0001.png'
