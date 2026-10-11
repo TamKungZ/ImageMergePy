@@ -426,6 +426,7 @@ def main():
         run_cmd(
             [sys.executable, str(root / "scripts" / "prepare_embedded_fonts.py")],
             root,
+            retries=3,
         )
 
         if system == "windows":
