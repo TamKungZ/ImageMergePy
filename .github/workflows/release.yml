@@ -212,6 +212,9 @@ jobs:
       - name: Smoke test Native SDK against standalone app
         run: python scripts/test_native_sdk.py
 
+      - name: Smoke test GUI start-up of standalone app
+        run: python scripts/smoke_gui.py
+
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: |

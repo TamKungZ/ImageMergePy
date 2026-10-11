@@ -65,6 +65,10 @@ def main() -> int:
 
     log = _setup_gui_diagnostics()
     try:
+        # The native "windows11" style plugin of Qt 6.12 segfaults in the Nuitka build
+        # on Windows; Fusion is stable and matches the app's own stylesheet/palette.
+        os.environ.setdefault("QT_STYLE_OVERRIDE", "Fusion")
+
         from PySide6.QtCore import qInstallMessageHandler
         from PySide6.QtWidgets import QApplication
 
@@ -80,8 +84,14 @@ def main() -> int:
         from .ui.app import App
 
         qt_app = QApplication(sys.argv)
+        qt_app.setStyle("Fusion")
         window = App()
         window.show()
+        if os.environ.get("IMAGEMERGE_GUI_SMOKE") == "1":
+            # CI / install smoke test: prove the real GUI starts, then exit cleanly.
+            from PySide6.QtCore import QTimer
+
+            QTimer.singleShot(2000, qt_app.quit)
         return qt_app.exec()
     except Exception:
         _report_fatal(log, traceback.format_exc())

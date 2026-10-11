@@ -327,8 +327,12 @@ jobs:
             param([string[]]$Arguments, [string]$WorkDir)
             $out = Join-Path $env:RUNNER_TEMP ("im-out-" + [guid]::NewGuid().ToString('N') + ".txt")
             $err = Join-Path $env:RUNNER_TEMP ("im-err-" + [guid]::NewGuid().ToString('N') + ".txt")
-            $p = Start-Process -FilePath $cmd.Source -ArgumentList $Arguments -WorkingDirectory $WorkDir `
-              -Wait -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+            $startArgs = @{
+              FilePath = $cmd.Source; WorkingDirectory = $WorkDir; Wait = $true; PassThru = $true
+              NoNewWindow = $true; RedirectStandardOutput = $out; RedirectStandardError = $err
+            }
+            if ($Arguments -and $Arguments.Count -gt 0) { $startArgs.ArgumentList = $Arguments }
+            $p = Start-Process @startArgs
             Get-Content -LiteralPath $out -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
             Get-Content -LiteralPath $err -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
             return $p.ExitCode
@@ -371,7 +375,16 @@ jobs:
             throw "CLI created an empty output file: $expectedOutput"
           }
 
-          Write-Host "Local manifest install and ImageMerge CLI smoke test succeeded"
+          # The CLI never opens a window, so also start the real GUI: it must run and exit cleanly.
+          $env:IMAGEMERGE_GUI_SMOKE = '1'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'imagemerge-gui-state'
+          New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+          $guiExit = Invoke-ImageMerge -WorkDir $testRoot
+          $guiLog = Join-Path $env:LOCALAPPDATA 'ImageMerge\error.log'
+          if (Test-Path -LiteralPath $guiLog) { Write-Host "---- error.log ----"; Get-Content -LiteralPath $guiLog | ForEach-Object { Write-Host $_ } }
+          if ($guiExit -ne 0) { throw "ImageMerge GUI start-up smoke test failed (exit $guiExit)" }
+
+          Write-Host "Local manifest install, ImageMerge CLI and GUI smoke tests succeeded"
 
       - name: Submit WinGet manifest
         shell: powershell
