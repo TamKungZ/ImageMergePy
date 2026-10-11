@@ -56,6 +56,10 @@ def run_cmd(
 
     if last_error is None:
         raise RuntimeError("Command failed without a captured exception")
+    if secrets:
+        raise RuntimeError(
+            f"Command failed with exit code {last_error.returncode}: {shown}"
+        ) from None
     raise last_error
 
 
