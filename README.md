@@ -103,17 +103,18 @@ more-0005.jpg   # more/3.jpg
 more-0006.mp4   # more/2.mp4
 ```
 
-Organizers use different rules for files already in the target folder:
+### Output names and order
 
-```text
-main_folder:   media type → extension → sequence number → duplicate suffix → prefix → filename
-inside_folder: media type → extension → modification time → sequence number → duplicate suffix → filename
-```
+Output files are named `NNNN.ext` or `prefix-NNNN.ext` (number of 4+ digits,
+continuous from `0001`). Merge, Library and Tidy all follow the same rules for
+files already in the output folder:
 
-Images still come before videos and extensions use the same order above. In
-`main_folder`, existing output files are ordered by their sequence numbers;
-newly imported files are first ordered by the Merge rules. In
-`inside_folder`, modification time is oldest first.
+1. Files already in this format keep their order, sorted by number only. If a
+   number is missing, later files move up to close the gap.
+2. Other files (new, or hand-named like `a.jpg`) go after them, sorted by media
+   type → extension → modification time (Tidy only) → number in the name →
+   filename.
+3. A file is renamed only when its name has to change.
 
 ## Download and install
 
