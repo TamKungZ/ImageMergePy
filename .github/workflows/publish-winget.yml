@@ -295,8 +295,21 @@ jobs:
           }
 
           winget validate --manifest $env:VERSION_DIR
-          if ($LASTEXITCODE -ne 0) { throw "Patched manifest failed validation" }
-          Write-Host "Manifest validation succeeded"
+          $validationExitCode = $LASTEXITCODE
+
+          # WinGet returns APPINSTALLER_CLI_ERROR_MANIFEST_VALIDATION_WARNING
+          # (0x8A150028 / -1978335192) when validation succeeds with warnings.
+          # Keep those warnings visible, but only fail on actual validation errors.
+          $warningExitCodes = @(-1978335192, 2316632104)
+          if ($validationExitCode -eq 0) {
+            Write-Host "Manifest validation succeeded without warnings"
+          }
+          elseif ($warningExitCodes -contains $validationExitCode) {
+            Write-Warning "Manifest validation succeeded with warnings; continuing to local install test."
+          }
+          else {
+            throw "Patched manifest failed validation (exit code: $validationExitCode)"
+          }
 
       - name: Install local manifest and smoke-test CLI
         shell: powershell
