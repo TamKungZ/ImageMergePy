@@ -120,6 +120,7 @@ files already in the output folder:
 
 Download the package for your operating system from
 [GitHub Releases](https://github.com/TamKungZ/ImageMergePy/releases).
+[![Download ImageMerge](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/imagemergepy/files/latest/download)
 
 ### Windows
 
