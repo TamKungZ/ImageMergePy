@@ -23,11 +23,16 @@ from .workspace import SafeWorkspace
 def validate_options(options: ProcessOptions, tr=t_identity) -> None:
     if options.mode not in ALL_MODES:
         raise ValueError(tr("error_unknown_mode", mode=options.mode))
+    output = options.output_dir.resolve()
+    if output.exists() and not output.is_dir():
+        raise ValueError(f"Output path exists and is not a folder: {output}")
+    for folder in options.inputs if options.mode != MODE_INSIDE_FOLDER else []:
+        if not folder.path.is_dir():
+            raise ValueError(f"Input folder does not exist: {folder.path}")
     if options.mode in ORGANIZER_MODES:
         return
     if not options.inputs:
         raise ValueError(tr("error_no_input"))
-    output = options.output_dir.resolve()
     for folder in options.inputs:
         source = folder.path.resolve()
         if source == output:

@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -20,7 +21,22 @@ class SafeWorkspace:
         self.session_dir: Path | None = None
         self.work_dir: Path | None = None
 
+    STALE_AFTER = 24 * 3600  # seconds
+
+    def _remove_stale_sessions(self) -> None:
+        root = self.output_dir / TEMP_ROOT_NAME
+        if not root.is_dir():
+            return
+        now = time.time()
+        for old in root.glob("session-*"):
+            try:
+                if now - old.stat().st_mtime > self.STALE_AFTER:
+                    shutil.rmtree(old, ignore_errors=True)
+            except OSError:
+                pass
+
     def __enter__(self) -> "SafeWorkspace":
+        self._remove_stale_sessions()
         self.session_dir = self.output_dir / TEMP_ROOT_NAME / f"session-{uuid.uuid4().hex}"
         self.work_dir = self.session_dir / "output"
         self.work_dir.mkdir(parents=True, exist_ok=True)

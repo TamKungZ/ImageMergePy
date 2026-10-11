@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import uuid
 from pathlib import Path
 from typing import Protocol
@@ -162,13 +163,37 @@ def is_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTS
 
 
-def iter_media_files(root_dir: Path):
+# Folders full of generated thumbnails / trash that would otherwise be imported as photos.
+JUNK_DIR_NAMES = {TEMP_ROOT_NAME, "@eaDir", ".AppleDouble", ".thumbnails", "$RECYCLE.BIN", ".Trash"}
+
+
+def iter_media_files(root_dir: Path, exclude_dirs=()):
+    excluded = {os.path.normcase(os.path.abspath(p)) for p in exclude_dirs}
     for root, dirnames, filenames in os.walk(root_dir):
-        dirnames[:] = [name for name in dirnames if name != TEMP_ROOT_NAME]
+        dirnames[:] = [
+            name
+            for name in dirnames
+            if name not in JUNK_DIR_NAMES
+            and not name.startswith(".Trash-")
+            and os.path.normcase(os.path.abspath(os.path.join(root, name))) not in excluded
+        ]
         base = Path(root)
         for name in filenames:
+            if name.startswith("._"):  # macOS AppleDouble sidecars, not real media
+                continue
             if os.path.splitext(name)[1].lower() in MEDIA_EXTS:
                 yield base / name
+
+
+def creation_time(path) -> float:
+    """Best available 'created' time. st_ctime on Linux is inode-change time, not creation."""
+    st = os.stat(path)
+    birth = getattr(st, "st_birthtime", None)
+    if birth is not None:
+        return birth
+    if sys.platform == "win32":
+        return st.st_ctime
+    return st.st_mtime
 
 
 def organize_output(
@@ -213,19 +238,21 @@ def organize_output(
     return final_files
 
 
-def collect_source_media(folders: list[SourceFolder]) -> list[tuple[Path, float, str]]:
+def collect_source_media(
+    folders: list[SourceFolder], exclude_dirs=()
+) -> list[tuple[Path, float, str]]:
     image_files = []
     video_files = []
     seen: set[str] = set()
 
     for folder in folders:
-        for file_path in iter_media_files(folder.path):
+        for file_path in iter_media_files(folder.path, exclude_dirs):
             identity = os.path.normcase(os.path.abspath(file_path))
             if identity in seen:
                 continue
             seen.add(identity)
             try:
-                ctime = os.path.getctime(file_path)
+                ctime = creation_time(file_path)
             except OSError:
                 ctime = 0
             item = (file_path, ctime, folder.prefix)

@@ -1,4 +1,5 @@
 """Merge / main-folder pipeline: import media from source folders into the work dir."""
+import errno
 import shutil
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from .fileops import safe_delete_file
 from .hashing import DuplicateIndex
 from .media_ordering import build_output_name, collect_source_media, organize_output
 from .models import JobContext
+
+_DISK_FULL = {code for code in (getattr(errno, "ENOSPC", None), getattr(errno, "EDQUOT", None)) if code}
 
 
 def _remove_source(ctx: JobContext, path: Path) -> None:
@@ -60,7 +63,7 @@ def run_merge(ctx: JobContext) -> None:
         for path in existing_files:
             index.add(path)
 
-    items = collect_source_media(ctx.scan_folders)
+    items = collect_source_media(ctx.scan_folders, exclude_dirs=[ctx.options.output_dir])
     total = len(items)
     logger.write(tr("log_found_media", count=total))
 
@@ -98,6 +101,8 @@ def run_merge(ctx: JobContext) -> None:
                     dest.unlink(missing_ok=True)
                 except OSError:
                     pass
+            if isinstance(exc, OSError) and exc.errno in _DISK_FULL:
+                raise  # disk full: every remaining file would fail too; abort (safe mode discards staging)
 
     ctx.progress(total, total)
     stats.total_output = len(organize_output(ctx.work_dir, logger=logger, tr=tr))

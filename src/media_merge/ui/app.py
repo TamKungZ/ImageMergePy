@@ -368,5 +368,8 @@ class App(AppLayoutMixin, PagesMixin, RunPanelMixin, AppLocalizationMixin, QMain
             if self.worker is not None:
                 self.worker.request_cancel()
             self.worker_thread.quit()
-            self.worker_thread.wait(15000)
+            if not self.worker_thread.wait(15000):
+                # A large file copy is still in flight; destroying the thread now would crash.
+                event.ignore()
+                return
         event.accept()

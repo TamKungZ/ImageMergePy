@@ -20,6 +20,11 @@ def _setup_gui_diagnostics():
     try:
         path = _log_file_path()
         path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if path.exists() and path.stat().st_size > 1_000_000:
+                path.replace(path.with_suffix(".log.old"))
+        except OSError:
+            pass
         log = open(path, "a", encoding="utf-8", buffering=1)
         log.write(f"\n=== {datetime.now().isoformat(timespec='seconds')} start (argv={sys.argv}) ===\n")
         faulthandler.enable(file=log, all_threads=True)

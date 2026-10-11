@@ -29,8 +29,10 @@ class I18n:
             except (OSError, ValueError):
                 catalog = {}
         if not catalog:
-            from ._embedded_locales import EMBEDDED_LOCALES
-
+            try:
+                from ._embedded_locales import EMBEDDED_LOCALES
+            except ImportError:
+                EMBEDDED_LOCALES = {}
             catalog = {str(k): str(v) for k, v in EMBEDDED_LOCALES.get(code, {}).items()}
         return catalog
 

@@ -40,8 +40,10 @@ def discover_supported_langs() -> set[str]:
         langs.update(f.stem.lower() for f in LOCALES_DIR.glob("*.json") if f.stem)
     if len(langs) == 1:
         # Packaged build without loose locale files: fall back to the embedded copy.
-        from ._embedded_locales import EMBEDDED_LOCALES
-
+        try:
+            from ._embedded_locales import EMBEDDED_LOCALES
+        except ImportError:  # neither loose nor embedded locales: English keys only
+            return langs
         langs.update(EMBEDDED_LOCALES)
     return langs
 
