@@ -1,5 +1,47 @@
+import faulthandler
 import os
 import sys
+import traceback
+from datetime import datetime
+from pathlib import Path
+
+
+def _log_file_path() -> Path:
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(base) / "ImageMerge" / "error.log"
+
+
+def _setup_gui_diagnostics():
+    """The GUI build has no console, so crashes would otherwise be silent.
+
+    Log Qt messages (including qFatal, which aborts the process), Python
+    tracebacks and native crashes to error.log.
+    """
+    try:
+        path = _log_file_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        log = open(path, "a", encoding="utf-8", buffering=1)
+        log.write(f"\n=== {datetime.now().isoformat(timespec='seconds')} start (argv={sys.argv}) ===\n")
+        faulthandler.enable(file=log, all_threads=True)
+        return log
+    except Exception:
+        return None
+
+
+def _report_fatal(log, text: str) -> None:
+    if log is not None:
+        try:
+            log.write(text + "\n")
+        except Exception:
+            pass
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            where = f"\n\nLog: {_log_file_path()}"
+            ctypes.windll.user32.MessageBoxW(0, text[-1500:] + where, "ImageMerge", 0x10)
+        except Exception:
+            pass
 
 
 def main() -> int:
@@ -21,11 +63,26 @@ def main() -> int:
                 traceback.print_exc()
             return 1
 
-    from PySide6.QtWidgets import QApplication
+    log = _setup_gui_diagnostics()
+    try:
+        from PySide6.QtCore import qInstallMessageHandler
+        from PySide6.QtWidgets import QApplication
 
-    from .ui.app import App
+        def _qt_message(mode, context, message):
+            if log is not None:
+                try:
+                    log.write(f"[Qt {mode.name}] {message}\n")
+                except Exception:
+                    pass
 
-    qt_app = QApplication(sys.argv)
-    window = App()
-    window.show()
-    return qt_app.exec()
+        qInstallMessageHandler(_qt_message)
+
+        from .ui.app import App
+
+        qt_app = QApplication(sys.argv)
+        window = App()
+        window.show()
+        return qt_app.exec()
+    except Exception:
+        _report_fatal(log, traceback.format_exc())
+        return 1
