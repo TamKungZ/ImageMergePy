@@ -192,6 +192,15 @@ jobs:
       - name: Build with Nuitka
         run: python scripts/build_nuitka.py
 
+      - name: Install Qt runtime libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 \
+            libfontconfig1 libdbus-1-3 libglib2.0-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 \
+            libx11-xcb1 libxcb-render-util0 libxcb-image0
+
       - name: Smoke test GUI start-up of standalone app
         run: python scripts/smoke_gui.py
 

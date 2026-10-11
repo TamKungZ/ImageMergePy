@@ -27,6 +27,8 @@ ways a long run could fail badly or leave files behind.
 - Safe workspace folders left behind by a crash or a killed process (`.imagemerge_temp/session-*`) are removed automatically once they are older than 24 hours
 - Closing the window while a job is still copying a large file no longer destroys the running thread; the window stays open until the job has stopped
 - `error.log` is rotated to `error.log.old` when it grows past 1 MB
+- Fixed a start-up failure being hidden by a second error: a function-local `import traceback` in `entry.py` made `traceback` unbound in the GUI error path, so a failed GUI start ended with `UnboundLocalError` and nothing useful in `error.log`; the original error and its traceback are now written to `error.log`
+- The Linux CI jobs now install the Qt runtime libraries (`libegl1`, `libgl1`, `libxkbcommon`, `libxcb-*`) before the GUI smoke test; the `.deb` already declared them as dependencies, but the hosted runner did not have `libEGL.so.1`
 - Updated application version metadata to `2.0.2`
 
 #### Carried over from v2.0.1

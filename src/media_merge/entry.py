@@ -63,8 +63,6 @@ def main() -> int:
         except Exception as exc:
             print(f"ERROR: {exc}", file=sys.stderr, flush=True)
             if os.environ.get("IMAGEMERGE_DEBUG"):
-                import traceback
-
                 traceback.print_exc()
             return 1
 
