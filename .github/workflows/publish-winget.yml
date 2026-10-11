@@ -35,7 +35,6 @@ jobs:
           if ($version.StartsWith('v')) { $version = $version.Substring(1) }
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "icon_url=https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$tag/assets/icons/app-icon-256.png" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "release_url=https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Checkout release tag
@@ -47,7 +46,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          foreach ($f in @('Releases.md', 'assets/icons/app-icon-256.png')) {
+          foreach ($f in @('Releases.md')) {
             if (-not (Test-Path -LiteralPath $f)) { throw "Required file missing at tag ${{ steps.meta.outputs.tag }}: $f" }
           }
 
@@ -208,12 +207,11 @@ jobs:
           "version_dir=$versionDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "locale_file=$($localeFile.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Inject Icons and ReleaseNotes into manifest
+      - name: Inject ReleaseNotes into manifest
         shell: python
         env:
           LOCALE_FILE: ${{ steps.generate.outputs.locale_file }}
           NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
-          ICON_URL: ${{ steps.meta.outputs.icon_url }}
           RELEASE_URL: ${{ steps.meta.outputs.release_url }}
         run: |
           import os, re
@@ -221,7 +219,6 @@ jobs:
 
           locale_file = Path(os.environ["LOCALE_FILE"])
           notes_file = Path(os.environ["NOTES_FILE"])
-          icon_url = os.environ["ICON_URL"]
           release_url = os.environ["RELEASE_URL"]
 
           if not locale_file.is_file():
@@ -257,21 +254,19 @@ jobs:
               "ReleaseNotes: |",
               indented_notes,
               f"ReleaseNotesUrl: {release_url}",
-              "Icons:",
-              f"- IconUrl: {icon_url}",
-              "  IconFileType: png",
-              "  IconResolution: 256x256",
-              "  IconTheme: default",
           ]
 
           result = filtered[:insert_at] + new_block + filtered[insert_at:]
           locale_file.write_text("\n".join(result) + "\n", encoding="utf-8")
 
           final = locale_file.read_text(encoding="utf-8")
-          for key in ("ReleaseNotes", "ReleaseNotesUrl", "Icons"):
+          for key in ("ReleaseNotes", "ReleaseNotesUrl"):
               count = len(re.findall(rf"(?m)^{key}:", final))
               if count != 1:
                   raise SystemExit(f"Expected exactly one '{key}:' in manifest, found {count}")
+          # Icons requires a verified publisher in winget-pkgs; it must never be submitted.
+          if re.search(r"(?m)^Icons:", final):
+              raise SystemExit("Icons block must not be present (requires verified publisher)")
           print(f"Patched {locale_file}")
 
       - name: Validate patched manifest
