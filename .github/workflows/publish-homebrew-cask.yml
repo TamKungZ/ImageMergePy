@@ -22,6 +22,10 @@ jobs:
   homebrew-cask:
     name: Update Homebrew Cask PR
     runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.pr.outputs.branch }}
+      pr_url: ${{ steps.pr.outputs.url }}
+      tap_repo: ${{ steps.tap.outputs.repo }}
     steps:
       - name: Resolve release tag
         id: meta
@@ -240,11 +244,13 @@ jobs:
 
           if git -C tap diff --cached --quiet; then
             echo "No cask changes to submit; the tap already has version ${VERSION}."
+            echo "branch=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git -C tap commit -m "chore(cask): update ${{ env.CASK_NAME }} to ${VERSION}"
           git -C tap push -u origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
           PR_URL="$(gh pr create \
             --repo "$BASE_REPO" \
@@ -256,3 +262,57 @@ jobs:
           PR_NUMBER="$(gh pr view "$PR_URL" --repo "$BASE_REPO" --json number --jq '.number')"
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+  test-cask:
+    name: Test brew tap & install --cask
+    needs: homebrew-cask
+    runs-on: macos-latest
+    steps:
+      - name: brew tap
+        shell: bash
+        env:
+          TAP_REPO: ${{ needs.homebrew-cask.outputs.tap_repo }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          # OWNER/homebrew-tap -> OWNER/tap (e.g. TamKungZ/homebrew-tap -> TamKungZ/tap)
+          TAP_NAME="$(echo "$TAP_REPO" | sed 's#/homebrew-#/#')"
+          echo "TAP_NAME=$TAP_NAME" >> "$GITHUB_ENV"
+
+          # Use the token in the URL if provided (needed for private taps)
+          if [ -n "$TAP_TOKEN" ]; then
+            TAP_URL="https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}"
+          else
+            TAP_URL="https://github.com/${TAP_REPO}"
+          fi
+
+          brew tap "$TAP_NAME" "$TAP_URL"
+
+      - name: Switch tap to PR branch
+        if: needs.homebrew-cask.outputs.branch != ''
+        shell: bash
+        env:
+          BRANCH: ${{ needs.homebrew-cask.outputs.branch }}
+        run: |
+          TAP_DIR="$(brew --repository "$TAP_NAME")"
+          git -C "$TAP_DIR" fetch origin "$BRANCH"
+          git -C "$TAP_DIR" checkout "$BRANCH"
+
+      - name: brew install --cask imagemerge
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          brew install --cask "${{ env.CASK_NAME }}"
+
+      - name: Verify installation
+        shell: bash
+        run: |
+          brew list --cask "${{ env.CASK_NAME }}"
+          test -d "/Applications/ImageMerge.app" || { echo "ImageMerge.app not found"; exit 1; }
+
+      - name: Uninstall (cleanup check)
+        if: always()
+        shell: bash
+        run: |
+          brew uninstall --cask "${{ env.CASK_NAME }}" || true
