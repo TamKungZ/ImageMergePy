@@ -311,6 +311,11 @@ jobs:
             throw "Patched manifest failed validation (exit code: $validationExitCode)"
           }
 
+          # GitHub Actions' PowerShell wrapper can propagate a native command's
+          # non-zero LASTEXITCODE even after we intentionally accepted the warning.
+          # Reset it after handling the validator result so this step exits successfully.
+          $global:LASTEXITCODE = 0
+
       - name: Install local manifest and smoke-test CLI
         shell: powershell
         env:
