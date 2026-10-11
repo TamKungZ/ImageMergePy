@@ -20,11 +20,10 @@ all platforms.
 - Added a source tarball integrity check: the build compares the number of regular runtime files in the build tree with the number inside the generated `.tar.xz` and refuses to upload if any file was dropped
 - Packaging files under `debian/` and `packaging/` are now converted to LF line endings before building, so a Windows checkout with CRLF can no longer break `debian/rules` or the launcher script
 - Added `override_dh_makeshlibs:` to `debian/rules` so `dh_makeshlibs` does not register the bundled runtime libraries as system shared libraries
-- Fixed `app_metadata.json` and the window icon not being found in compiled builds
+- Fixed `app_metadata.json` not being found in compiled builds
   - `APP_DIR` in `metadata.py` assumed the source layout (`parents[2]`), but in a standalone build the module lives in `<dist>/media_merge/`, so the path pointed outside the dist folder and the About page showed version `-`
   - Compiled builds now detect `__compiled__` and resolve the dist folder from the module name, so it works whether the package is imported as `media_merge` or `src.media_merge`
 - Fixed bundled fonts not loading when the app is started through `PATH` on Linux: `fonts.py` used `sys.argv[0]`, which can be a bare file name; it now uses `APP_DIR / "fonts"`
-- Added `assets/icons` to the Nuitka build with `--include-data-dir` (only when the folder exists), since the app loads `app-icon.ico` at runtime
 - The Windows signing step in `build_nuitka.py` no longer prints the certificate password in the logged `signtool` command (shown as `***`), and the password is no longer stripped. Signing only runs when `IMAGEMERGE_SIGN=1`, which the release workflows do not set
 - Build cleanup now removes the generated `_embedded_locales.py` as well as the old `_embedded_fonts.py`, and a duplicated font-folder cleanup was removed
 - Architecture detection in `build_nuitka.py` now reads the running Python interpreter, so a 32-bit Python on 64-bit Windows is no longer reported as x64; the log line now says "Resolved target architecture"

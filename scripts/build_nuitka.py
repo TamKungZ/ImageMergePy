@@ -277,10 +277,6 @@ def nuitka_base_cmd(root: Path, output_dir: Path) -> list[str]:
     if metadata_path.exists():
         cmd.append(f"--include-data-file={metadata_path}=app_metadata.json")
 
-    icons_dir = root / "assets" / "icons"
-    if icons_dir.is_dir():
-        cmd.append(f"--include-data-dir={icons_dir}=assets/icons")
-
     font_dir = root / "build" / "fonts"
     font_files = sorted(font_dir.glob("*.ttf"))
     font_licenses = sorted(font_dir.glob("*-OFL.txt"))

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QThread, QUrl
-from PySide6.QtGui import QDesktopServices, QIcon
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMainWindow, QMessageBox
 
 from ..config import SUPPORTED_LANGS, detect_language
@@ -18,7 +18,6 @@ from ..constants import (
 )
 from ..i18n import I18n
 from ..media_ordering import normalize_prefix
-from ..metadata import APP_DIR
 from ..models import ProcessOptions, ProcessStats, SourceFolder
 from ..worker import ProcessWorker
 from .dialogs import show_about_dialog
@@ -38,10 +37,6 @@ class App(AppLayoutMixin, PagesMixin, RunPanelMixin, AppLocalizationMixin, QMain
         super().__init__()
         self.i18n = I18n(detect_language())
         self.t = self.i18n.t
-
-        icon_path = APP_DIR / "assets" / "icons" / "app-icon.ico"
-        if icon_path.exists():
-            self.setWindowIcon(QIcon(str(icon_path)))
 
         self.setWindowTitle(self.t("app_title") or APP_FALLBACK_TITLE)
         self.resize(1180, 760)
