@@ -10,7 +10,7 @@ def run_inside(ctx: JobContext) -> None:
 
     if opts.remove_duplicates_in_place and not opts.allow_duplicate_files:
         ordered = organize_output(
-            ctx.work_dir, logger=logger, tr=tr, minimal_rename=True, sort_by_file_mtime=True
+            ctx.work_dir, logger=logger, tr=tr, sort_by_file_mtime=True
         )
         index = DuplicateIndex(
             on_error=lambda path, exc: logger.write(
@@ -36,6 +36,6 @@ def run_inside(ctx: JobContext) -> None:
         ctx.progress(total, total)
 
     final_files = organize_output(
-        ctx.work_dir, logger=logger, tr=tr, minimal_rename=True, sort_by_file_mtime=True
+        ctx.work_dir, logger=logger, tr=tr, sort_by_file_mtime=True
     )
     stats.total_output = len(final_files)

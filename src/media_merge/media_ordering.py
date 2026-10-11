@@ -101,23 +101,53 @@ def source_sort_key(item):
     return (ext_priority, 2, number, duplicate_index, ctime, stem_lower)
 
 
-def output_sort_key(path: Path, sort_by_file_mtime: bool = False):
-    ext_lower = path.suffix.lower()
-    ext_priority = IMAGE_EXT_PRIORITY.get(ext_lower, VIDEO_EXT_PRIORITY.get(ext_lower, 999999))
-    stem_lower = path.stem.lower()
+FORMATTED_STEM_RE = re.compile(r"^(?:(?P<prefix>[A-Za-z0-9_-]+?)-)?(?P<number>\d{4,})$")
 
+
+def media_ext_priority(ext: str) -> int:
+    """Images first, then videos; each in the documented extension order."""
+    ext = ext.lower()
+    if ext in IMAGE_EXT_PRIORITY:
+        return IMAGE_EXT_PRIORITY[ext]
+    if ext in VIDEO_EXT_PRIORITY:
+        return len(IMAGE_EXT_ORDER) + VIDEO_EXT_PRIORITY[ext]
+    return 999999
+
+
+def formatted_sequence_number(path: Path) -> int | None:
+    """Sequence number if the name already follows the output format, else None."""
+    match = FORMATTED_STEM_RE.match(path.stem.strip())
+    return int(match.group("number")) if match else None
+
+
+def output_sort_key(path: Path, sort_by_file_mtime: bool = False):
+    """Sort key for files already sitting in the output folder.
+
+    Files whose names already follow the output format come first and keep their
+    existing order (the sequence number decides, nothing else), so an organized
+    folder stays where it is and gaps simply close up. Everything else (new or
+    hand-named files) follows, ordered by media type -> extension -> (mtime ->)
+    number -> duplicate suffix -> prefix -> name.
+    """
+    stem_lower = path.stem.lower()
+    ext_priority = media_ext_priority(path.suffix)
+    prefix, existing_number = split_existing_prefix_and_number(path)
+    mtime = 0.0
     if sort_by_file_mtime:
         try:
             mtime = os.path.getmtime(path)
         except OSError:
-            mtime = 0
-        number, duplicate_index = split_numbered_stem(path)
-        return (ext_priority, mtime, number, duplicate_index, stem_lower)
+            mtime = 0.0
+
+    formatted_number = formatted_sequence_number(path)
+    if formatted_number is not None:
+        return (0, formatted_number, ext_priority, mtime, prefix, stem_lower)
 
     number, duplicate_index = split_numbered_stem(path)
-    prefix, existing_number = split_existing_prefix_and_number(path)
+    if sort_by_file_mtime:
+        return (1, ext_priority, mtime, number, duplicate_index, stem_lower)
     sort_number = number if number != 99999999 else existing_number
-    return (ext_priority, sort_number, duplicate_index, prefix, stem_lower)
+    return (1, ext_priority, 0.0, sort_number, duplicate_index, prefix, stem_lower)
 
 
 def is_media_file(path: Path) -> bool:
@@ -145,62 +175,42 @@ def organize_output(
     output_dir: Path,
     logger: LogWriter | None = None,
     tr=t_identity,
-    minimal_rename: bool = False,
+    minimal_rename: bool = True,
     sort_by_file_mtime: bool = False,
 ):
+    """Re-index the media in ``output_dir`` as one gapless 0001.. sequence.
+
+    Only files whose name differs from their target are touched, so an already
+    organized folder is left exactly as it is. ``minimal_rename`` is kept for
+    backwards compatibility and no longer changes behaviour.
+    """
     media_files = [path for path in output_dir.iterdir() if is_media_file(path)]
-
-    image_files = sorted(
-        [path for path in media_files if is_image(path)],
-        key=lambda path: output_sort_key(path, sort_by_file_mtime),
+    ordered_files = sorted(
+        media_files, key=lambda path: output_sort_key(path, sort_by_file_mtime)
     )
-    video_files = sorted(
-        [path for path in media_files if is_video(path)],
-        key=lambda path: output_sort_key(path, sort_by_file_mtime),
-    )
-    ordered_files = image_files + video_files
 
-    if minimal_rename:
-        planned: list[tuple[Path, Path]] = []
-        final_files: list[Path] = []
-        for index, file_path in enumerate(ordered_files, start=1):
-            prefix, _ = split_existing_prefix_and_number(file_path)
-            desired = output_dir / build_output_name(index, file_path.suffix, prefix)
-            final_files.append(desired)
-            if file_path.name != desired.name:
-                planned.append((file_path, desired))
+    planned: list[tuple[Path, Path]] = []
+    final_files: list[Path] = []
+    for index, file_path in enumerate(ordered_files, start=1):
+        prefix, _ = split_existing_prefix_and_number(file_path)
+        desired = output_dir / build_output_name(index, file_path.suffix, prefix)
+        final_files.append(desired)
+        if file_path.name != desired.name:
+            planned.append((file_path, desired))
 
-        if planned:
-            temp_pairs: list[tuple[Path, Path]] = []
-            for src_path, dst_path in planned:
-                temp_name = f"__temp__{uuid.uuid4().hex}{src_path.suffix.lower()}"
-                temp_path = output_dir / temp_name
-                src_path.rename(temp_path)
-                temp_pairs.append((temp_path, dst_path))
-
-            for temp_path, dst_path in temp_pairs:
-                temp_path.rename(dst_path)
-
-        renamed_files = final_files
-    else:
-        temp_files: list[tuple[Path, str]] = []
-        for file_path in ordered_files:
-            prefix, _ = split_existing_prefix_and_number(file_path)
-            temp_name = f"__temp__{uuid.uuid4().hex}{file_path.suffix.lower()}"
-            temp_path = output_dir / temp_name
-            file_path.rename(temp_path)
-            temp_files.append((temp_path, prefix))
-
-        renamed_files: list[Path] = []
-        for index, (temp_path, prefix) in enumerate(temp_files, start=1):
-            new_path = output_dir / build_output_name(index, temp_path.suffix, prefix)
-            temp_path.rename(new_path)
-            renamed_files.append(new_path)
+    if planned:
+        temp_pairs: list[tuple[Path, Path]] = []
+        for src_path, dst_path in planned:
+            temp_path = output_dir / f"__temp__{uuid.uuid4().hex}{src_path.suffix.lower()}"
+            src_path.rename(temp_path)
+            temp_pairs.append((temp_path, dst_path))
+        for temp_path, dst_path in temp_pairs:
+            temp_path.rename(dst_path)
 
     if logger:
-        logger.write(tr("log_output_organized", count=len(renamed_files)))
+        logger.write(tr("log_output_organized", count=len(final_files)))
 
-    return renamed_files
+    return final_files
 
 
 def collect_source_media(folders: list[SourceFolder]) -> list[tuple[Path, float, str]]:
