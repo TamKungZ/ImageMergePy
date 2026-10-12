@@ -15,6 +15,77 @@ from pathlib import Path
 
 SUPPORTED_SUITES = {"jammy": "22.04", "noble": "24.04", "resolute": "26.04"}
 
+REQUIRED_RUNTIME_DEPENDS = [
+    "libxcb-cursor0",
+    "libxkbcommon-x11-0",
+    "libxkbcommon0",
+    "libxcb1",
+    "libxcb-icccm4",
+    "libxcb-keysyms1",
+    "libxcb-randr0",
+    "libxcb-shape0",
+    "libxcb-xfixes0",
+    "libxcb-xinerama0",
+    "libxcb-xkb1",
+    "libxcb-sync1",
+    "libxcb-shm0",
+    "libxcb-render0",
+    "libxcb-render-util0",
+    "libxcb-image0",
+    "libx11-xcb1",
+    "libx11-6",
+    "libxext6",
+    "libxrender1",
+    "libxi6",
+    "libsm6",
+    "libice6",
+    "libegl1",
+    "libgl1",
+    "libfontconfig1",
+    "libfreetype6",
+    "libdbus-1-3",
+    "libglib2.0-0",
+    "zlib1g",
+]
+
+
+def merge_runtime_depends(control_text: str, required: list[str]) -> str:
+    """Add `required` packages to the Depends field of the first binary package stanza."""
+    lines = control_text.split("\n")
+    start = next((i for i, line in enumerate(lines) if line.startswith("Package:")), None)
+    if start is None:
+        raise ValueError("debian/control has no binary Package stanza")
+    end = start
+    while end < len(lines) and lines[end].strip():
+        end += 1
+
+    dep_start = next((i for i in range(start, end) if lines[i].startswith("Depends:")), None)
+    existing: list[str] = []
+    dep_end = dep_start
+    if dep_start is not None:
+        dep_end = dep_start + 1
+        while dep_end < end and lines[dep_end][:1] in (" ", "\t"):
+            dep_end += 1
+        joined = " ".join(
+            [lines[dep_start][len("Depends:"):]] + [l.strip() for l in lines[dep_start + 1:dep_end]]
+        )
+        existing = [item.strip() for item in joined.split(",") if item.strip()]
+
+    def name_of(entry: str) -> str:
+        return re.split(r"[\s(|<\[]", entry, maxsplit=1)[0]
+
+    present = {name_of(item) for item in existing}
+    merged = existing + [pkg for pkg in required if pkg not in present]
+    block = ["Depends: " + merged[0] + ","] + [f" {item}," for item in merged[1:]]
+    block[-1] = block[-1].rstrip(",")
+
+    if dep_start is None:
+        arch = next((i for i in range(start, end) if lines[i].startswith("Architecture:")), end - 1)
+        lines[arch + 1:arch + 1] = block
+    else:
+        lines[dep_start:dep_end] = block
+    return "\n".join(lines)
+
 
 def is_inside(path: Path, directory: Path) -> bool:
     try:
@@ -96,6 +167,8 @@ def build_source_package(
     signing_key: str,
     signing_command: Path,
     maintainer_email: str,
+    revision: int = 1,
+    changelog_note: str = "",
 ) -> Path:
     if suite not in SUPPORTED_SUITES:
         raise ValueError(
@@ -121,7 +194,9 @@ def build_source_package(
             f"Tag version {upstream_version} does not match app metadata version {metadata_version}"
         )
 
-    debian_version = f"{upstream_version}ubuntu{SUPPORTED_SUITES[suite]}.1"
+    if revision < 1:
+        raise ValueError("Revision must be 1 or greater")
+    debian_version = f"{upstream_version}ubuntu{SUPPORTED_SUITES[suite]}.{revision}"
     output_dir.mkdir(parents=True, exist_ok=True)
     template_dir = root / "packaging" / "launchpad" / "debian"
     package_dir_name = f"imagemerge-{debian_version}"
@@ -136,13 +211,15 @@ def build_source_package(
         shutil.copy2(root / "LICENSE", package_dir / "LICENSE")
         shutil.copytree(template_dir, package_dir / "debian")
         control_file = package_dir / "debian" / "control"
-        control_file.write_text(
-            control_file.read_text(encoding="utf-8").replace(
-                "__LAUNCHPAD_MAINTAINER_EMAIL__",
-                maintainer_email,
-            ),
-            encoding="utf-8",
+        control_text = control_file.read_text(encoding="utf-8").replace(
+            "__LAUNCHPAD_MAINTAINER_EMAIL__",
+            maintainer_email,
         )
+        control_text = merge_runtime_depends(control_text, REQUIRED_RUNTIME_DEPENDS)
+        control_file.write_text(control_text, encoding="utf-8")
+        for dependency in REQUIRED_RUNTIME_DEPENDS:
+            if dependency not in control_file.read_text(encoding="utf-8"):
+                raise RuntimeError(f"debian/control is missing dependency {dependency}")
         (package_dir / "packaging").mkdir()
         shutil.copy2(
             root / "packaging" / "launchpad" / "imagemerge",
@@ -150,9 +227,12 @@ def build_source_package(
         )
         normalize_line_endings(package_dir / "debian", package_dir / "packaging")
 
+        note = " ".join(changelog_note.split())
+        note_line = f"  * {note}\n" if note else ""
         changelog = (
             f"imagemerge ({debian_version}) {suite}; urgency=medium\n\n"
-            f"  * Package ImageMerge {upstream_version} for Ubuntu {suite}.\n\n"
+            f"  * Package ImageMerge {upstream_version} for Ubuntu {suite}.\n"
+            f"{note_line}\n"
             f" -- TamKungZ_ <{maintainer_email}>  "
             f"{datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')}\n"
         )
@@ -219,6 +299,14 @@ def main() -> int:
     parser.add_argument("--signing-key", required=True)
     parser.add_argument("--signing-command", type=Path, required=True)
     parser.add_argument("--maintainer-email", required=True)
+    parser.add_argument(
+        "--revision",
+        type=int,
+        default=1,
+        help="Ubuntu package revision (the trailing .N in 2.0.2ubuntu26.04.N); "
+        "raise it to re-upload the same release with packaging fixes",
+    )
+    parser.add_argument("--changelog-note", default="", help="Extra changelog line")
     args = parser.parse_args()
 
     changes_file = build_source_package(
@@ -230,6 +318,8 @@ def main() -> int:
         args.signing_key,
         args.signing_command.resolve(),
         args.maintainer_email,
+        args.revision,
+        args.changelog_note,
     )
     print(f"Source package ready: {changes_file}")
     return 0
