@@ -116,11 +116,19 @@ files already in the output folder:
    filename.
 3. A file is renamed only when its name has to change.
 
-## Download and install
+## Download and Install
 
-Download the package for your operating system from
-[GitHub Releases](https://github.com/TamKungZ/ImageMergePy/releases).
-[![Download ImageMerge](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/imagemergepy/files/latest/download)
+Download the latest version for your operating system from [GitHub Releases](https://github.com/TamKungZ/ImageMergePy/releases), or use one of the download options below.
+
+<p align="center">
+  <a href="https://sourceforge.net/projects/imagemergepy/files/latest/download">
+    <img src="https://a.fsdn.com/con/app/sf-download-button" alt="Download ImageMerge from SourceForge">
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://get.microsoft.com/installer/download/9ndnkpjpzt67?referrer=appbadge">
+    <img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store">
+  </a>
+</p>
 
 ### Windows
 
