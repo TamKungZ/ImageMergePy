@@ -118,15 +118,23 @@ files already in the output folder:
 
 ## Download and Install
 
-Download the latest version for your operating system from [GitHub Releases](https://github.com/TamKungZ/ImageMergePy/releases), or use one of the download options below.
+Download the latest version for your operating system from [GitHub Releases](https://github.com/TamKungZ/ImageMergePy/releases), or choose one of the download options below.
 
 <p align="center">
   <a href="https://sourceforge.net/projects/imagemergepy/files/latest/download">
-    <img src="https://a.fsdn.com/con/app/sf-download-button" alt="Download ImageMerge from SourceForge">
+    <img
+      src="https://a.fsdn.com/con/app/sf-download-button"
+      alt="Download ImageMerge from SourceForge"
+      height="40"
+    >
   </a>
   &nbsp;&nbsp;
   <a href="https://get.microsoft.com/installer/download/9ndnkpjpzt67?referrer=appbadge">
-    <img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store">
+    <img
+      src="https://get.microsoft.com/images/en-us%20dark.svg"
+      alt="Get ImageMerge from Microsoft Store"
+      height="40"
+    >
   </a>
 </p>
 
