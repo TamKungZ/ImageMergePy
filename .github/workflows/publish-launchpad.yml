@@ -44,6 +44,27 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.tag }}
 
+      - name: Check out packaging tooling from the workflow commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+
+      - name: Use current packaging tooling with the tagged release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in tooling/scripts/build_launchpad_source.py tooling/packaging/launchpad/debian tooling/packaging/launchpad/imagemerge; do
+            if [ ! -e "$path" ]; then
+              echo "::error::Missing packaging file on the dispatched ref: ${path#tooling/}"
+              exit 1
+            fi
+          done
+          mkdir -p scripts packaging
+          cp tooling/scripts/build_launchpad_source.py scripts/build_launchpad_source.py
+          rm -rf packaging/launchpad
+          cp -a tooling/packaging/launchpad packaging/launchpad
+
       - name: Validate release and suite
         id: meta
         shell: bash
