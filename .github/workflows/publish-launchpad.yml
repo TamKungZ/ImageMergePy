@@ -45,12 +45,14 @@ jobs:
           ref: refs/tags/${{ inputs.tag }}
 
       - name: Check out packaging tooling from the workflow commit
+        if: inputs.revision != '1'
         uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           path: tooling
 
       - name: Use current packaging tooling with the tagged release
+        if: inputs.revision != '1'
         shell: bash
         run: |
           set -euo pipefail
@@ -190,6 +192,12 @@ jobs:
           EOF
           chmod 0700 "$signing_command"
 
+          # Revision 1 runs the tag's own script exactly as released (older scripts have no --revision).
+          extra_args=()
+          if [ "${{ steps.meta.outputs.revision }}" != "1" ]; then
+            extra_args+=(--revision "${{ steps.meta.outputs.revision }}" --changelog-note "$CHANGELOG_NOTE")
+          fi
+
           mkdir -p "$RUNNER_TEMP/launchpad-source"
           python3 scripts/build_launchpad_source.py \
             --archive "$RUNNER_TEMP/imagemerge-release/ImageMerge-linux-x64.zip" \
@@ -199,10 +207,21 @@ jobs:
             --signing-key "$GPG_KEY_ID" \
             --signing-command "$signing_command" \
             --maintainer-email "$MAINTAINER_EMAIL" \
-            --revision "${{ steps.meta.outputs.revision }}" \
-            --changelog-note "$CHANGELOG_NOTE"
+            "${extra_args[@]}"
 
-          # Show what is about to be uploaded: version and declared runtime dependencies.
+          # Refuse to upload a package that would not start on a clean system.
+          source_tarball="$(find "$RUNNER_TEMP/launchpad-source" -maxdepth 1 -name '*.tar.xz' -print -quit)"
+          if [ -z "$source_tarball" ]; then
+            echo "Source tarball was not produced."
+            exit 1
+          fi
+          control="$(tar -xJOf "$source_tarball" --wildcards '*/debian/control')"
+          for lib in libfontconfig1 libfreetype6 libdbus-1-3 libglib2.0-0 libxcb-cursor0; do
+            if ! printf '%s' "$control" | grep -q "$lib"; then
+              echo "::error::debian/control does not depend on $lib. This tag's packaging is incomplete; upload revision 2 or higher from a fixed commit instead."
+              exit 1
+            fi
+          done
           grep -h '^Version:' "$RUNNER_TEMP"/launchpad-source/*.dsc
 
           # Upload the signed source package to Launchpad.
