@@ -199,7 +199,9 @@ jobs:
           sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 \
             libfontconfig1 libdbus-1-3 libglib2.0-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-keysyms1 libxcb-randr0 libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 \
-            libx11-xcb1 libxcb-render-util0 libxcb-image0
+            libx11-xcb1 libxcb-render-util0 libxcb-image0 libxcb-xkb1 libxcb-sync1 \
+            libxcb-shm0 libxcb-render0 libx11-6 libxext6 libxrender1 libxi6 libsm6 libice6 \
+            libfreetype6
 
       - name: Smoke test GUI start-up of standalone app
         run: python scripts/smoke_gui.py
@@ -321,6 +323,13 @@ jobs:
               'libxcb-image.so.0',
               'libX11-xcb.so.1',
               'libxkbcommon.so.0',
+              'libxcb-xkb.so.1',
+              'libxcb-sync.so.1',
+              'libxcb-shm.so.0',
+              'libxcb-render.so.0',
+              'libfontconfig.so.1',
+              'libfreetype.so.6',
+              'libdbus-1.so.3',
           ]
 
           copied_runtime_libs = []
@@ -398,20 +407,38 @@ jobs:
               ;;
           esac
 
+          # Keep in sync with the "Install Qt runtime libraries" step and the clean-container test below.
           DEB_DEPENDS=(
             "libxcb-cursor0"
             "libxkbcommon-x11-0"
+            "libxkbcommon0"
+            "libxcb1"
             "libxcb-icccm4"
             "libxcb-keysyms1"
             "libxcb-randr0"
             "libxcb-shape0"
             "libxcb-xfixes0"
             "libxcb-xinerama0"
-            "libx11-xcb1"
+            "libxcb-xkb1"
+            "libxcb-sync1"
+            "libxcb-shm0"
+            "libxcb-render0"
             "libxcb-render-util0"
             "libxcb-image0"
+            "libx11-xcb1"
+            "libx11-6"
+            "libxext6"
+            "libxrender1"
+            "libxi6"
+            "libsm6"
+            "libice6"
             "libegl1"
             "libgl1"
+            "libfontconfig1"
+            "libfreetype6"
+            "libdbus-1-3"
+            "libglib2.0-0"
+            "zlib1g"
           )
           DEB_DEP_ARGS=()
           for dep in "${DEB_DEPENDS[@]}"; do
@@ -422,15 +449,27 @@ jobs:
           mv imagemerge_*_"$DEB_ARCH".deb release_assets/ImageMerge-linux-"$ARCH_LABEL".deb
 
           RPM_DEPENDS=(
-            "libxcb-cursor"
+            "xcb-util-cursor"
             "libxkbcommon-x11"
+            "libxkbcommon"
+            "libxcb"
             "xcb-util-wm"
             "xcb-util-keysyms"
             "xcb-util-renderutil"
             "xcb-util-image"
+            "libX11"
             "libX11-xcb"
+            "libXext"
+            "libXrender"
+            "libXi"
+            "libSM"
+            "libICE"
             "libEGL"
             "libGL"
+            "fontconfig"
+            "freetype"
+            "dbus-libs"
+            "glib2"
           )
           RPM_DEP_ARGS=()
           for dep in "${RPM_DEPENDS[@]}"; do
@@ -444,6 +483,39 @@ jobs:
           if [ "$ARCH_RAW" = "amd64" ]; then APPIMAGE_ARCH="x86_64"; fi
           if [ "$ARCH_RAW" = "arm64" ]; then APPIMAGE_ARCH="aarch64"; fi
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$APPIMAGE_ARCH" ./appimagetool ImageMerge.AppDir release_assets/ImageMerge-linux-"$ARCH_LABEL".AppImage
+
+      - name: Verify .deb installs and starts on clean Ubuntu (22.04 and 24.04)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in ubuntu:22.04 ubuntu:24.04; do
+            echo "=== $image ==="
+            docker run --rm -v "$PWD/release_assets:/pkg:ro" "$image" bash -euc '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              # apt resolves only the dependencies declared in the .deb, exactly like a real user install.
+              apt-get install -y -qq /pkg/ImageMerge-linux-x64.deb
+              missing="$(find /opt/ImageMerge -type f \( -name "*.so*" -o -name ImageMerge \) -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true)"
+              if [ -n "$missing" ]; then
+                echo "Undeclared shared library dependencies:"; echo "$missing"; exit 1
+              fi
+              QT_QPA_PLATFORM=offscreen timeout 20 imagemerge --help >/dev/null 2>&1 || test $? -eq 124 || { echo "imagemerge failed to start"; QT_QPA_PLATFORM=offscreen imagemerge --help; exit 1; }
+            '
+          done
+
+      - name: Verify .rpm installs on clean Fedora
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/release_assets:/pkg:ro" fedora:latest bash -euc '
+            dnf install -y -q /pkg/ImageMerge-linux-x64.rpm
+            missing="$(find /opt/ImageMerge -type f \( -name "*.so*" -o -name ImageMerge \) -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true)"
+            if [ -n "$missing" ]; then
+              echo "Undeclared shared library dependencies:"; echo "$missing"; exit 1
+            fi
+          '
 
       - name: Build Linux Flatpak bundle
         if: runner.os == 'Linux'
