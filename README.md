@@ -1,5 +1,5 @@
 <h1>
-  <img src="https://raw.githubusercontent.com/TamKungZ/ImageMergePy/refs/heads/main/assets/icons/app-icon.svg" width="40" height="40" align="center" alt="ImageMerge icon">
+  <img src="https://raw.githubusercontent.com/TamKungZ/ImageMergePy/refs/heads/main/assets/icons/app-icon.svg" width="30" height="30" align="center" alt="ImageMerge icon">
   ImageMerge
 </h1>
 
