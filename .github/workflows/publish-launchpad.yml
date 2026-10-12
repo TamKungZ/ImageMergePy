@@ -11,6 +11,16 @@ on:
         description: Email registered with Launchpad and the upload signing key
         required: true
         type: string
+      revision:
+        description: Ubuntu package revision, the trailing N in 2.0.2ubuntu26.04.N (use 2 to replace .1; never reuse a revision already in the PPA)
+        required: true
+        default: "2"
+        type: string
+      changelog_note:
+        description: Extra line for debian/changelog (optional)
+        required: false
+        default: Declare the complete Qt runtime library dependencies (fixes libfontconfig.so.1 missing on clean installs).
+        type: string
 
 permissions:
   contents: read
@@ -39,12 +49,17 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.tag }}
+          PACKAGE_REVISION: ${{ inputs.revision }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
           if [[ ! "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "Tag must be a stable version tag such as v2.0.0."
+            exit 1
+          fi
+          if [[ ! "$PACKAGE_REVISION" =~ ^[1-9][0-9]{0,2}$ ]]; then
+            echo "revision must be a positive integer such as 2."
             exit 1
           fi
 
@@ -70,6 +85,7 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "revision=$PACKAGE_REVISION" >> "$GITHUB_OUTPUT"
 
       - name: Validate Launchpad signing key
         shell: bash
@@ -120,6 +136,7 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_LINUX }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE_LINUX }}
           MAINTAINER_EMAIL: ${{ inputs.maintainer_email }}
+          CHANGELOG_NOTE: ${{ inputs.changelog_note }}
         run: |
           set -euo pipefail
           if [[ ! "$MAINTAINER_EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
@@ -160,7 +177,12 @@ jobs:
             --output-dir "$RUNNER_TEMP/launchpad-source" \
             --signing-key "$GPG_KEY_ID" \
             --signing-command "$signing_command" \
-            --maintainer-email "$MAINTAINER_EMAIL"
+            --maintainer-email "$MAINTAINER_EMAIL" \
+            --revision "${{ steps.meta.outputs.revision }}" \
+            --changelog-note "$CHANGELOG_NOTE"
+
+          # Show what is about to be uploaded: version and declared runtime dependencies.
+          grep -h '^Version:' "$RUNNER_TEMP"/launchpad-source/*.dsc
 
           # Upload the signed source package to Launchpad.
           # This must happen in the same step so GNUPGHOME is still available for dput's signature verification.
