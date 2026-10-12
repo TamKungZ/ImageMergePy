@@ -149,16 +149,20 @@ Download the latest version for your operating system from [GitHub Releases](htt
   sudo apt install -y curl gnupg
   sudo install -d -m 0755 /etc/apt/keyrings
 
-  curl -fsSL https://packages.tamkungz.me/gpg.key \
-    | sudo gpg --dearmor --yes -o /etc/apt/keyrings/tamkungz.gpg
-
+  KEY=B64B156379154E5B6C176D0D6157503BFCD109A4
+  TMP=$(mktemp)
+  if curl -fsSL https://packages.tamkungz.me/gpg.key -o "$TMP" && gpg --show-keys --with-colons "$TMP" | grep -qiF "$KEY"; then
+    sudo gpg --dearmor --yes -o /etc/apt/keyrings/tamkungz.gpg "$TMP"
+  else
+    gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys "$KEY" &&
+    gpg --export "$KEY" | sudo gpg --dearmor --yes -o /etc/apt/keyrings/tamkungz.gpg
+  fi
+  rm -f "$TMP"
+  
   sudo chmod 0644 /etc/apt/keyrings/tamkungz.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/tamkungz.gpg] https://ppa.launchpadcontent.net/tamkungz/stable/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") main" | sudo tee /etc/apt/sources.list.d/tamkungz-stable.list
 
-  echo "deb [signed-by=/etc/apt/keyrings/tamkungz.gpg] https://ppa.launchpadcontent.net/tamkungz/stable/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
-    | sudo tee /etc/apt/sources.list.d/tamkungz-stable.list
-
-  sudo apt update
-  sudo apt install imagemerge
+  sudo apt update && sudo apt install -y imagemerge
   ```
 
 - Fedora and compatible distributions: install the `.rpm`.
