@@ -3,6 +3,13 @@
   ImageMerge
 </h1>
 
+[![Latest Release](https://img.shields.io/github/v/release/TamKungZ/ImageMergePy?display_name=tag&style=flat-square)](https://github.com/TamKungZ/ImageMergePy/releases/latest)
+[![GitHub Downloads](https://img.shields.io/github/downloads/TamKungZ/ImageMergePy/total?label=GitHub%20downloads&style=flat-square)](https://github.com/TamKungZ/ImageMergePy/releases)
+[![SourceForge Downloads](https://img.shields.io/sourceforge/dt/imagemergepy.svg?label=SourceForge%20downloads&style=flat-square)](https://sourceforge.net/projects/imagemergepy/)
+[![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Available-0078D4?logo=microsoftstore&logoColor=white&style=flat-square)](https://apps.microsoft.com/detail/9ndnkpjpzt67)
+![Platforms](https://img.shields.io/badge/Windows%20%7C%20Linux%20%7C%20macOS-Supported-555?style=flat-square)
+![Python Source](https://img.shields.io/badge/Python%20source-3.10%2B-3776AB?logo=python&logoColor=white&style=flat-square)
+
 ImageMerge combines images and videos from folders, removes duplicate files,
 and renames the results into an ordered sequence.
 
