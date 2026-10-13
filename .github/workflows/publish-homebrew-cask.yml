@@ -26,6 +26,7 @@ jobs:
       branch: ${{ steps.pr.outputs.branch }}
       pr_url: ${{ steps.pr.outputs.url }}
       tap_repo: ${{ steps.tap.outputs.repo }}
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - name: Resolve release tag
         id: meta
@@ -266,8 +267,17 @@ jobs:
   test-cask:
     name: Test brew tap & install --cask
     needs: homebrew-cask
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15-intel, macos-15]
     steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
       - name: brew tap
         shell: bash
         env:
@@ -307,9 +317,20 @@ jobs:
 
       - name: Verify installation
         shell: bash
+        env:
+          EXPECTED_VERSION: ${{ needs.homebrew-cask.outputs.version }}
         run: |
+          set -euo pipefail
           brew list --cask "${{ env.CASK_NAME }}"
+          installed="$(brew list --cask --versions "${{ env.CASK_NAME }}")"
+          if [[ "$installed" != "${{ env.CASK_NAME }} $EXPECTED_VERSION" ]]; then
+            echo "Unexpected cask version: $installed (expected $EXPECTED_VERSION)"
+            exit 1
+          fi
           test -d "/Applications/ImageMerge.app" || { echo "ImageMerge.app not found"; exit 1; }
+          executable="/Applications/ImageMerge.app/Contents/MacOS/ImageMerge"
+          test -x "$executable" || { echo "ImageMerge executable not found: $executable"; exit 1; }
+          python3 scripts/smoke_gui.py "$executable"
 
       - name: Uninstall (cleanup check)
         if: always()

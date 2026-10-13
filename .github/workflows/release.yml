@@ -500,7 +500,7 @@ jobs:
               if [ -n "$missing" ]; then
                 echo "Undeclared shared library dependencies:"; echo "$missing"; exit 1
               fi
-              QT_QPA_PLATFORM=offscreen timeout 20 imagemerge --help >/dev/null 2>&1 || test $? -eq 124 || { echo "imagemerge failed to start"; QT_QPA_PLATFORM=offscreen imagemerge --help; exit 1; }
+              IMAGEMERGE_GUI_SMOKE=1 QT_QPA_PLATFORM=offscreen timeout --kill-after=5s 30s imagemerge
             '
           done
 
@@ -515,7 +515,82 @@ jobs:
             if [ -n "$missing" ]; then
               echo "Undeclared shared library dependencies:"; echo "$missing"; exit 1
             fi
+            IMAGEMERGE_GUI_SMOKE=1 QT_QPA_PLATFORM=offscreen timeout --kill-after=5s 30s imagemerge
           '
+
+      - name: Verify Windows installers install and launch
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $smokeScript = Join-Path $PWD 'scripts\smoke_gui.py'
+          $installers = @(
+            @{ Path = 'release_assets\ImageMerge-windows-x64.msi'; InstallDir = (Join-Path $env:ProgramFiles 'ImageMerge') },
+            @{ Path = 'release_assets\ImageMergeGUI-windows-x64-msstore.msi'; InstallDir = (Join-Path $env:ProgramFiles 'ImageMergeGUI') }
+          )
+
+          foreach ($installer in $installers) {
+            if (-not (Test-Path -LiteralPath $installer.Path)) { throw "Installer not found: $($installer.Path)" }
+            Write-Host "Installing $($installer.Path)"
+            $install = Start-Process msiexec.exe -ArgumentList @('/i', "`"$($installer.Path)`"", '/qn', '/norestart') -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "MSI installation failed with exit code $($install.ExitCode): $($installer.Path)" }
+
+            $exe = Join-Path $installer.InstallDir 'ImageMerge.exe'
+            if (-not (Test-Path -LiteralPath $exe)) { throw "Installed executable not found: $exe" }
+            & python $smokeScript $exe
+            if ($LASTEXITCODE -ne 0) { throw "Installed GUI smoke test failed: $exe" }
+
+            $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', "`"$($installer.Path)`"", '/qn', '/norestart') -Wait -PassThru
+            if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed with exit code $($uninstall.ExitCode): $($installer.Path)" }
+          }
+
+      - name: Verify Windows MSIX installs and launches
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          MSIX_PFX_BASE64: ${{ secrets.MSIX_PFX_BASE64 }}
+          MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pfxPath = Join-Path $PWD 'msix-test-signing.pfx'
+          $cerPath = Join-Path $PWD 'msix-test-signing.cer'
+          $certificates = @()
+          $packageName = $null
+          $myThumbprint = $null
+          try {
+            [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
+            $password = ConvertTo-SecureString $env:MSIX_PFX_PASSWORD -AsPlainText -Force
+            $signingCert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\LocalMachine\My -Password $password
+            $myThumbprint = $signingCert.Thumbprint
+            Export-Certificate -Cert $signingCert -FilePath $cerPath | Out-Null
+            foreach ($store in @('Cert:\LocalMachine\Root', 'Cert:\LocalMachine\TrustedPeople')) {
+              $certificates += Import-Certificate -FilePath $cerPath -CertStoreLocation $store
+            }
+
+            $metadata = Get-Content 'app_metadata.json' -Raw | ConvertFrom-Json
+            $packageName = [string]$metadata.msix_identity_name
+            Add-AppxPackage -Path 'release_assets\ImageMergeGUI-windows-x64.msix'
+            $package = Get-AppxPackage -Name $packageName
+            if (-not $package) { throw "Installed MSIX package not found: $packageName" }
+
+            $exe = Join-Path $package.InstallLocation 'ImageMerge.exe'
+            if (-not (Test-Path -LiteralPath $exe)) { throw "Installed MSIX executable not found: $exe" }
+            & python (Join-Path $PWD 'scripts\smoke_gui.py') $exe
+            if ($LASTEXITCODE -ne 0) { throw "Installed MSIX GUI smoke test failed: $exe" }
+          }
+          finally {
+            if ($packageName) {
+              Get-AppxPackage -Name $packageName | Remove-AppxPackage -ErrorAction SilentlyContinue
+            }
+            foreach ($certificate in $certificates) {
+              Remove-Item -LiteralPath "Cert:\LocalMachine\Root\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
+              Remove-Item -LiteralPath "Cert:\LocalMachine\TrustedPeople\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
+            }
+            if ($myThumbprint) {
+              Remove-Item -LiteralPath "Cert:\LocalMachine\My\$myThumbprint" -ErrorAction SilentlyContinue
+            }
+            Remove-Item -LiteralPath $pfxPath, $cerPath -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Build Linux Flatpak bundle
         if: runner.os == 'Linux'
