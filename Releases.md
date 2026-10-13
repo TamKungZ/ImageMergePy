@@ -1,3 +1,27 @@
+Tag: v2.0.3
+Release title: v2.0.3 - Responsive Close During Processing
+Release notes:
+## ImageMerge v2.0.3
+
+### Highlights
+- Closing the app during a job now requests cancellation and waits for the worker
+  asynchronously. The window stays responsive and closes automatically when the
+  current operation has stopped, rather than blocking the UI while waiting.
+- Added a regression test for confirming cancellation, repeated close requests,
+  and closing after the worker finishes.
+
+### Verification
+- `tests.test_ui_smoke.UiSmokeTests.test_close_during_job_is_deferred_until_worker_stops` passes with Qt's offscreen platform.
+
+### Upgrade
+No settings or data changes are needed. Download the new build from the Releases
+page and replace the previous version.
+
+### License
+This project remains open-source under the **MIT License**.
+
+---
+
 Tag: v2.0.2
 Release title: v2.0.2 - Runtime Robustness Fixes + v2.0.1 Fixes
 Release notes:

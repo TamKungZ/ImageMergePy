@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Published GitHub Release tag (for example v2.0.0)
+        description: Published GitHub Release tag (for example v2.0.3)
         required: true
         type: string
       maintainer_email:
@@ -12,14 +12,14 @@ on:
         required: true
         type: string
       revision:
-        description: Ubuntu package revision, the trailing N in 2.0.2ubuntu26.04.N (use 2 to replace .1; never reuse a revision already in the PPA)
+        description: Ubuntu package revision, the trailing N in 2.0.3ubuntu26.04.N (increase only when re-uploading this release)
         required: true
-        default: "2"
+        default: "1"
         type: string
       changelog_note:
-        description: Extra line for debian/changelog (optional)
+        description: Extra line for debian/changelog, if needed (optional)
         required: false
-        default: Declare the complete Qt runtime library dependencies (fixes libfontconfig.so.1 missing on clean installs).
+        default: ""
         type: string
 
 permissions:

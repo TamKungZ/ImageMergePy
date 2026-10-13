@@ -47,6 +47,7 @@ class App(AppLayoutMixin, PagesMixin, RunPanelMixin, AppLocalizationMixin, QMain
         self._output_path: str = ""
         self._last_stats: ProcessStats | None = None
         self._cancelling = False
+        self._close_when_worker_stops = False
 
         self.is_running = False
         self.worker_thread: QThread | None = None
@@ -332,9 +333,13 @@ class App(AppLayoutMixin, PagesMixin, RunPanelMixin, AppLocalizationMixin, QMain
         self.stat_failed.set_value(stats.failed)
 
     def _on_process_finished(self):
+        close_when_finished = self._close_when_worker_stops
+        self._close_when_worker_stops = False
         self.worker = None
         self.worker_thread = None
         self._set_running_ui(False)
+        if close_when_finished:
+            self.close()
 
     def _on_worker_process_done(self):
         stats = self._last_stats
@@ -356,7 +361,9 @@ class App(AppLayoutMixin, PagesMixin, RunPanelMixin, AppLocalizationMixin, QMain
         QMessageBox.critical(self, self.t("app_title"), msg)
 
     def closeEvent(self, event):
-        # Closing mid-job used to destroy a running QThread (crash). Cancel and wait instead.
+        if self._close_when_worker_stops:
+            event.ignore()
+            return
         if self.is_running and self.worker_thread is not None:
             answer = QMessageBox.question(
                 self, self.t("app_title"), self.t("msg_busy_close"),
@@ -365,11 +372,8 @@ class App(AppLayoutMixin, PagesMixin, RunPanelMixin, AppLocalizationMixin, QMain
             if answer != QMessageBox.Yes:
                 event.ignore()
                 return
-            if self.worker is not None:
-                self.worker.request_cancel()
-            self.worker_thread.quit()
-            if not self.worker_thread.wait(15000):
-                # A large file copy is still in flight; destroying the thread now would crash.
-                event.ignore()
-                return
+            self._close_when_worker_stops = True
+            self.cancel_process()
+            event.ignore()
+            return
         event.accept()

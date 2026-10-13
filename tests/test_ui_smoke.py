@@ -1,9 +1,12 @@
 import os
 import unittest
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QThread
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from src.media_merge.config import (
     SUPPORTED_LANGS,
@@ -50,6 +53,47 @@ class UiSmokeTests(unittest.TestCase):
             window.lang_selector.setCurrentIndex(alternate_index)
             self.assertEqual(window.i18n.lang, window.lang_selector.itemData(alternate_index))
             self.assertEqual(window.styleSheet(), global_stylesheet(window.font_family))
+
+    def test_close_during_job_is_deferred_until_worker_stops(self):
+        window = App()
+        worker_thread = QThread(window)
+        worker_thread.finished.connect(window._on_process_finished)
+
+        def close_window():
+            if worker_thread.isRunning():
+                worker_thread.quit()
+                worker_thread.wait(1000)
+            window.is_running = False
+            window.worker_thread = None
+            window._close_when_worker_stops = False
+            window.close()
+
+        self.addCleanup(close_window)
+        worker = Mock()
+        window.worker = worker
+        window.worker_thread = worker_thread
+        window.is_running = True
+        window.show()
+        worker_thread.start()
+        self.qt_app.processEvents()
+
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes) as question:
+            first_event = QCloseEvent()
+            window.closeEvent(first_event)
+
+            self.assertFalse(first_event.isAccepted())
+            worker.request_cancel.assert_called_once()
+            self.assertTrue(worker_thread.isRunning())
+
+            second_event = QCloseEvent()
+            window.closeEvent(second_event)
+            self.assertFalse(second_event.isAccepted())
+            question.assert_called_once()
+
+            worker_thread.quit()
+            self.assertTrue(worker_thread.wait(1000))
+            self.qt_app.processEvents()
+            self.assertFalse(window.isVisible())
 
 
 if __name__ == "__main__":

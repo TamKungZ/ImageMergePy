@@ -303,7 +303,7 @@ def main() -> int:
         "--revision",
         type=int,
         default=1,
-        help="Ubuntu package revision (the trailing .N in 2.0.2ubuntu26.04.N); "
+        help="Ubuntu package revision (the trailing .N in 2.0.3ubuntu26.04.N); "
         "raise it to re-upload the same release with packaging fixes",
     )
     parser.add_argument("--changelog-note", default="", help="Extra changelog line")
