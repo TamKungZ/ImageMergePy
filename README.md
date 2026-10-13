@@ -154,6 +154,10 @@ Download the latest version for your operating system from [GitHub Releases](htt
   sudo apt update && sudo apt install -y imagemerge
   ```
 
+- Debian/Ubuntu and Fedora/RHEL users can also install from the
+  [TamKungZ package repository](https://packages.tamkungz.me/), which provides
+  copyable setup and install instructions.
+
 - Fedora and compatible distributions: install the `.rpm`.
 - AppImage, Flatpak, and Snap packages are also available in Releases.
 - The `.deb`, `.rpm`, and PPA packages provide the `imagemerge` command.

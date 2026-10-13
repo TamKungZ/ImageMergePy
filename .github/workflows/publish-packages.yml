@@ -1,0 +1,83 @@
+name: Publish to TamKungZ Packages
+
+# Add PACKAGES_DISPATCH_TOKEN as an Actions secret: a fine-grained PAT scoped only
+# to TamKungZ/tamkungz-pkgs with Actions: read and write.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published GitHub Release tag (for example v2.0.2)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.event.release.tag_name || inputs.tag || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish release packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate published release and package assets
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_TAG"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release tag: $tag"
+            exit 1
+          fi
+
+          release="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag")"
+          if [ "$(jq -r '.draft' <<<"$release")" != "false" ]; then
+            echo "::error::Release $tag must be published before package distribution."
+            exit 1
+          fi
+          if [ "$(jq -r '.prerelease' <<<"$release")" = "true" ]; then
+            echo "::error::Prereleases are not published to TamKungZ Packages."
+            exit 1
+          fi
+
+          for asset in ImageMerge-linux-x64.deb ImageMerge-linux-x64.rpm; do
+            if ! jq -e --arg name "$asset" '.assets | any(.name == $name)' <<<"$release" >/dev/null; then
+              echo "::error::Release $tag is missing required package asset: $asset"
+              exit 1
+            fi
+          done
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Validate package dispatch token
+        env:
+          PACKAGES_DISPATCH_TOKEN: ${{ secrets.PACKAGES_DISPATCH_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$PACKAGES_DISPATCH_TOKEN" ]; then
+            echo "::error::Missing secret: PACKAGES_DISPATCH_TOKEN"
+            echo "Create a fine-grained token for TamKungZ/tamkungz-pkgs with Actions: read and write."
+            exit 1
+          fi
+
+      - name: Ask TamKungZ Packages to ingest this release
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_DISPATCH_TOKEN }}
+          SOURCE: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+          PACKAGES_REPO: TamKungZ/tamkungz-pkgs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run publish.yml --repo "$PACKAGES_REPO" --ref main \
+            -f source="$SOURCE" -f tag="$TAG"
+          echo "Dispatched $SOURCE $TAG to $PACKAGES_REPO."
