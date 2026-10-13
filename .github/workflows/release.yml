@@ -851,6 +851,9 @@ jobs:
           Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "Square150x150Logo.png") -Width 150 -Height 150
           Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "Square310x310Logo.png") -Width 310 -Height 310
           Write-ResizedPng -InputPath $iconSource -OutputPath (Join-Path $assetsDir "StoreLogo.png") -Width 50 -Height 50
+          Copy-Item `
+            -Path (Join-Path $assetsDir "Square44x44Logo.png") `
+            -Destination (Join-Path $assetsDir "Square44x44Logo.targetsize-44_altform-unplated.png")
 
           $versionParts4 = $productVersionRaw.Split('.')
           while ($versionParts4.Count -lt 4) { $versionParts4 += "0" }
@@ -882,6 +885,27 @@ jobs:
           ) -join "`n"
 
           Set-Content -Path (Join-Path $msixRoot "AppxManifest.xml") -Value $manifest -Encoding UTF8
+
+          $makepri = (Get-Command makepri.exe -ErrorAction SilentlyContinue).Source
+          if (-not $makepri) {
+            $makepri = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Filter makepri.exe -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match "\\x64\\makepri\.exe$" } |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $makepri) { throw "makepri.exe not found" }
+
+          $priConfig = Join-Path ([System.IO.Path]::GetTempPath()) ("imagemerge-priconfig-" + [guid]::NewGuid().ToString("N") + ".xml")
+          $resourcesPri = Join-Path $msixRoot "resources.pri"
+          try {
+            & $makepri createconfig /cf $priConfig /dq en-US /o
+            if ($LASTEXITCODE -ne 0) { throw "makepri createconfig failed" }
+            & $makepri new /pr $msixRoot /cf $priConfig /of $resourcesPri /o
+            if ($LASTEXITCODE -ne 0) { throw "makepri new failed" }
+          }
+          finally {
+            if (Test-Path $priConfig) { Remove-Item -LiteralPath $priConfig -Force }
+          }
 
           $makeappx = (Get-Command makeappx.exe -ErrorAction SilentlyContinue).Source
           if (-not $makeappx) {

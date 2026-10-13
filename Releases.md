@@ -9,6 +9,9 @@ Release notes:
   current operation has stopped, rather than blocking the UI while waiting.
 - Added a regression test for confirming cancellation, repeated close requests,
   and closing after the worker finishes.
+- Microsoft Store MSIX builds now include the target-based unplated 44x44 icon
+  resource and generate `resources.pri`, allowing Windows to use the icon without
+  its taskbar backplate.
 
 ### Verification
 - `tests.test_ui_smoke.UiSmokeTests.test_close_during_job_is_deferred_until_worker_stops` passes with Qt's offscreen platform.
