@@ -166,11 +166,11 @@ Download the latest version for your operating system from [GitHub Releases](htt
 
 - Install with Homebrew:
 
-```bash
+  ```bash
   brew tap TamKungZ/tap
   brew trust TamKungZ/tap
   brew install --cask imagemerge
-```
+  ```
 
 - Or download the app bundle for Apple Silicon (`arm64`) or Intel (`x64`).
   Direct-download bundles are not signed or notarized, so Gatekeeper may block
