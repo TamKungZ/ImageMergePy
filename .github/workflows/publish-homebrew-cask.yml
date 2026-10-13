@@ -307,6 +307,11 @@ jobs:
           git -C "$TAP_DIR" fetch origin "$BRANCH"
           git -C "$TAP_DIR" checkout "$BRANCH"
 
+      - name: Trust tap
+        shell: bash
+        run: |
+          brew trust "$TAP_NAME"
+
       - name: brew install --cask imagemerge
         shell: bash
         env:
