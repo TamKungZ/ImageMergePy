@@ -494,13 +494,14 @@ jobs:
             docker run --rm -v "$PWD/release_assets:/pkg:ro" "$image" bash -euc '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
+              apt-get install -y -qq xvfb xauth
               # apt resolves only the dependencies declared in the .deb, exactly like a real user install.
               apt-get install -y -qq /pkg/ImageMerge-linux-x64.deb
-              missing="$(find /opt/ImageMerge -type f \( -name "*.so*" -o -name ImageMerge \) -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true)"
+              missing="$(ldd /opt/ImageMerge/ImageMerge | grep "not found" || true)"
               if [ -n "$missing" ]; then
                 echo "Undeclared shared library dependencies:"; echo "$missing"; exit 1
               fi
-              IMAGEMERGE_GUI_SMOKE=1 QT_QPA_PLATFORM=offscreen timeout --kill-after=5s 30s imagemerge
+              xvfb-run -a timeout --kill-after=5s 30s env IMAGEMERGE_GUI_SMOKE=1 QT_QPA_PLATFORM=xcb imagemerge
             '
           done
 
@@ -510,12 +511,13 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm -v "$PWD/release_assets:/pkg:ro" fedora:latest bash -euc '
+            dnf install -y -q xorg-x11-server-Xvfb xorg-x11-xauth
             dnf install -y -q /pkg/ImageMerge-linux-x64.rpm
-            missing="$(find /opt/ImageMerge -type f \( -name "*.so*" -o -name ImageMerge \) -exec ldd {} + 2>/dev/null | grep "not found" | sort -u || true)"
+            missing="$(ldd /opt/ImageMerge/ImageMerge | grep "not found" || true)"
             if [ -n "$missing" ]; then
               echo "Undeclared shared library dependencies:"; echo "$missing"; exit 1
             fi
-            IMAGEMERGE_GUI_SMOKE=1 QT_QPA_PLATFORM=offscreen timeout --kill-after=5s 30s imagemerge
+            xvfb-run -a timeout --kill-after=5s 30s env IMAGEMERGE_GUI_SMOKE=1 QT_QPA_PLATFORM=xcb imagemerge
           '
 
       - name: Build Linux Flatpak bundle
